@@ -66,11 +66,11 @@ class ReLoopin_Loyalty_Launcher
             return;
         }
 
-        $base = plugin_dir_url(RELOOPIN_LOYALTY_PLUGIN_DIR . 'reloopin-loyalty.php');
+        $base = RELOOPIN_LOYALTY_PLUGIN_URL;
 
         // Google Fonts — encode commas per WP docs to prevent URL stripping
         $font_url = str_replace(',', '%2C', 'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-        wp_enqueue_style('reloopin-google-fonts', $font_url, [], null);
+        wp_enqueue_style('reloopin-google-fonts', $font_url, [], RELOOPIN_LOYALTY_VERSION);
 
         wp_enqueue_style(
             'reloopin-launcher',
@@ -109,18 +109,24 @@ class ReLoopin_Loyalty_Launcher
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
             'i18n'            => [
+                /* translators: %s: customer first name */
                 'welcome_back'       => __('Welcome back, %s!', 'reloopin-loyalty'),
                 'ways_to_earn'       => __('Ways to earn', 'reloopin-loyalty'),
+                /* translators: %s: points amount */
                 'pts_per_dollar'     => __('%s pts per $1', 'reloopin-loyalty'),
                 'one_time_bonus'     => __('One-time bonus', 'reloopin-loyalty'),
+                /* translators: %s: points multiplier, e.g. "2x" */
                 'x_pts'              => __('%sx pts', 'reloopin-loyalty'),
                 'add_now'            => __('Add now', 'reloopin-loyalty'),
                 'get_link'           => __('Get link', 'reloopin-loyalty'),
                 'available'          => __('Available', 'reloopin-loyalty'),
+                /* translators: %s: points balance */
                 'redeem_your_points' => __('Redeem your points — %s pts', 'reloopin-loyalty'),
                 'redeem_placeholder' => __('Redeem options will appear here. Use the "Apply at checkout" button below to redeem points on your next order.', 'reloopin-loyalty'),
-                'pts_to'             => __('%s pts to %s', 'reloopin-loyalty'),
-                'at_pts'             => __('%s at %s pts', 'reloopin-loyalty'),
+                /* translators: 1: points required, 2: next tier name */
+                'pts_to'             => __('%1$s pts to %2$s', 'reloopin-loyalty'),
+                /* translators: 1: reward label, 2: points cost */
+                'at_pts'             => __('%1$s at %2$s pts', 'reloopin-loyalty'),
                 'unknown'            => __('Unknown', 'reloopin-loyalty'),
                 'bday_saved'         => __('Birthday saved! You\'ll earn bonus points every year.', 'reloopin-loyalty'),
                 'referral_copied'    => __('Referral link copied to clipboard!', 'reloopin-loyalty'),
@@ -195,7 +201,7 @@ class ReLoopin_Loyalty_Launcher
         }
 
         $user_id    = get_current_user_id();
-        $page       = max(1, (int) ($_POST['page'] ?? 1));
+        $page       = max(1, absint(wp_unslash($_POST['page'] ?? 1)));
         $entry_type = isset($_POST['entry_type']) ? sanitize_text_field(wp_unslash($_POST['entry_type'])) : null;
         $cache_key  = 'rl_hist_' . $user_id . '_' . $page . '_' . ($entry_type ?: 'all');
         $cached     = get_transient($cache_key);

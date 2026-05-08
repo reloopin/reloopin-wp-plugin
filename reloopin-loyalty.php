@@ -8,8 +8,10 @@
  * Requires at least: 6.0
  * Requires PHP: 8.0
  * WC requires at least: 7.0
- * WC tested up to: 9.0
+ * WC tested up to: 9.4
  * Text Domain: reloopin-loyalty
+ * License:     GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 if (!defined('ABSPATH')) {
@@ -18,6 +20,7 @@ if (!defined('ABSPATH')) {
 
 define('RELOOPIN_LOYALTY_VERSION', '1.0.0');
 define('RELOOPIN_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('RELOOPIN_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 /** Platform integer for WooCommerce in the loyalty backend. */
 define('RELOOPIN_LOYALTY_PLATFORM', 1);
@@ -44,7 +47,7 @@ function reloopin_loyalty_debug(string $message, mixed $context = null): void
         $entry .= ' | ' . (is_string($context) ? $context : wp_json_encode($context));
     }
 
-    error_log($entry);
+    error_log($entry); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 }
 
 /**
@@ -65,7 +68,11 @@ function reloopin_loyalty_init()
 {
     if (!class_exists('WooCommerce')) {
         add_action('admin_notices', function () {
-            echo '<div class="notice notice-error"><p><strong>reLoopin Loyalty</strong> requires WooCommerce to be installed and active.</p></div>';
+            echo '<div class="notice notice-error"><p><strong>' .
+                esc_html__('reLoopin Loyalty', 'reloopin-loyalty') .
+                '</strong> ' .
+                esc_html__('requires WooCommerce to be installed and active.', 'reloopin-loyalty') .
+                '</p></div>';
         });
         return;
     }
@@ -173,7 +180,7 @@ function reloopin_loyalty_get_settings()
             'desc'    => __('Display branding and footer in the launcher panel.', 'reloopin-loyalty'),
             'id'      => 'reloopin_launcher_branding',
             'type'    => 'checkbox',
-            'default' => 'yes',
+            'default' => 'no',
         ],
         [
             'type' => 'sectionend',

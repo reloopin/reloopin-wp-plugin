@@ -141,7 +141,8 @@ class ReLoopin_Loyalty_Orders
             $note_lines[] = sprintf('  [FAILED: %s — %s]', $et, $err);
         }
         $order->add_order_note(sprintf(
-            __('reloopin Loyalty: %d transaction(s) posted.%s', 'reloopin-loyalty'),
+            /* translators: 1: number of transactions posted, 2: newline-separated list of transaction results */
+            __('reloopin Loyalty: %1$d transaction(s) posted.%2$s', 'reloopin-loyalty'),
             count($succeeded),
             "\n" . implode("\n", $note_lines)
         ));
