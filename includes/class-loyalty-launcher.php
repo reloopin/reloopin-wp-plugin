@@ -51,8 +51,8 @@ class ReLoopin_Loyalty_Launcher
         }
         $user_id = (int) $order->get_customer_id();
         if ($user_id > 0) {
-            delete_transient('rl_bal_' . $user_id);
-            delete_transient('rl_hist_' . $user_id . '_1');
+            delete_transient('reloopin_bal_' . $user_id);
+            delete_transient('reloopin_hist_' . $user_id . '_1');
         }
     }
 
@@ -100,7 +100,7 @@ class ReLoopin_Loyalty_Launcher
             }
         }
 
-        wp_localize_script('reloopin-launcher', 'rlLauncher', [
+        wp_localize_script('reloopin-launcher', 'reloopinLauncher', [
             'ajax_url'        => admin_url('admin-ajax.php'),
             'nonce'           => wp_create_nonce('reloopin_launcher'),
             'is_logged_in'    => is_user_logged_in(),
@@ -151,7 +151,7 @@ class ReLoopin_Loyalty_Launcher
         }
 
         $user_id   = get_current_user_id();
-        $cache_key = 'rl_bal_' . $user_id;
+        $cache_key = 'reloopin_bal_' . $user_id;
         $cached    = get_transient($cache_key);
 
         if ($cached !== false) {
@@ -203,7 +203,7 @@ class ReLoopin_Loyalty_Launcher
         $user_id    = get_current_user_id();
         $page       = max(1, absint(wp_unslash($_POST['page'] ?? 1)));
         $entry_type = isset($_POST['entry_type']) ? sanitize_text_field(wp_unslash($_POST['entry_type'])) : null;
-        $cache_key  = 'rl_hist_' . $user_id . '_' . $page . '_' . ($entry_type ?: 'all');
+        $cache_key  = 'reloopin_hist_' . $user_id . '_' . $page . '_' . ($entry_type ?: 'all');
         $cached     = get_transient($cache_key);
 
         if ($cached !== false) {
@@ -249,7 +249,7 @@ class ReLoopin_Loyalty_Launcher
     {
         check_ajax_referer('reloopin_launcher', 'nonce');
 
-        $cache_key = 'rl_rules_' . get_option('reloopin_loyalty_merchant_id', '');
+        $cache_key = 'reloopin_rules_' . get_option('reloopin_loyalty_merchant_id', '');
         $cached    = get_transient($cache_key);
 
         if ($cached !== false) {
@@ -289,7 +289,7 @@ class ReLoopin_Loyalty_Launcher
     {
         check_ajax_referer('reloopin_launcher', 'nonce');
 
-        $cache_key = 'rl_tiers_' . get_option('reloopin_loyalty_merchant_id', '');
+        $cache_key = 'reloopin_tiers_' . get_option('reloopin_loyalty_merchant_id', '');
         $cached    = get_transient($cache_key);
 
         if ($cached !== false) {

@@ -31,7 +31,7 @@ global $wpdb;
 $wpdb->query(
     $wpdb->prepare(
         "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-        $wpdb->esc_like('_transient_rl_') . '%',
-        $wpdb->esc_like('_transient_timeout_rl_') . '%'
+        $wpdb->esc_like('_transient_reloopin_') . '%',
+        $wpdb->esc_like('_transient_timeout_reloopin_') . '%'
     )
 );

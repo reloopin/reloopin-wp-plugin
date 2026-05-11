@@ -14,11 +14,11 @@
 (function () {
   'use strict';
 
-  /* global rlLauncher */
-  if (typeof rlLauncher === 'undefined') return;
+  /* global reloopinLauncher */
+  if (typeof reloopinLauncher === 'undefined') return;
 
   // ── i18n helper ─────────────────────────────────────────────────────────
-  var i18n = rlLauncher.i18n || {};
+  var i18n = reloopinLauncher.i18n || {};
   function t(key, replacements) {
     var str = i18n[key] || key;
     if (replacements) {
@@ -30,7 +30,7 @@
   }
 
   // ── State ──────────────────────────────────────────────────────────────
-  var isLoggedIn   = !!rlLauncher.is_logged_in;
+  var isLoggedIn   = !!reloopinLauncher.is_logged_in;
   var panelOpen    = false;
   var guestOpen    = false;
   var dataLoaded   = false;
@@ -63,10 +63,10 @@
     // Set initials from localized data
     var avEls = [document.getElementById('rl-user-av'), document.getElementById('rl-launcher-av')];
     avEls.forEach(function (el) {
-      if (el) el.textContent = rlLauncher.user_initials || '';
+      if (el) el.textContent = reloopinLauncher.user_initials || '';
     });
     var nameEl = document.getElementById('rl-user-name');
-    if (nameEl) nameEl.textContent = t('welcome_back', [rlLauncher.user_first_name || '']);
+    if (nameEl) nameEl.textContent = t('welcome_back', [reloopinLauncher.user_first_name || '']);
   } else {
     elLoggedin.style.display = 'none';
     elGuest.style.display = '';
@@ -153,14 +153,14 @@
   function ajaxPost(action, extraData, onSuccess, onError) {
     var data = new FormData();
     data.append('action', action);
-    data.append('nonce', rlLauncher.nonce);
+    data.append('nonce', reloopinLauncher.nonce);
     if (extraData) {
       Object.keys(extraData).forEach(function (k) {
         data.append(k, extraData[k]);
       });
     }
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', rlLauncher.ajax_url, true);
+    xhr.open('POST', reloopinLauncher.ajax_url, true);
     xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
