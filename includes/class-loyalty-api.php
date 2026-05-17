@@ -6,7 +6,7 @@
  *
  * Endpoints used:
  *   POST /api/v1/merchant/transaction-entry   — post a transaction (auto-awards points)
- *   GET  /api/v1/merchant/points/balance      — get customer balance + tier
+ *   GET  /api/v1/merchant/points/customer/balance      — get customer balance + tier
  *   GET  /api/v1/merchant/points/history      — get paginated ledger
  *   POST /api/v1/merchant/points/redeem       — deduct points from balance
  */
@@ -100,7 +100,7 @@ class ReLoopin_Loyalty_API
     {
         reloopin_loyalty_debug('get_balance → request', ['customer_ref' => $customer_ref]);
 
-        return $this->get('/api/v1/merchant/points/balance', [
+        return $this->get('/api/v1/merchant/points/customer/balance', [
             'merchant_id' => $this->merchant_id,
             'customer_ref' => $customer_ref,
         ]);
