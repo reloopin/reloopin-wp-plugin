@@ -33,6 +33,9 @@ class ReLoopin_Loyalty_Launcher
         add_action('wp_ajax_nopriv_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
         add_action('wp_ajax_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
         add_action('wp_ajax_nopriv_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
+        // Earn status + birthday save (logged-in only)
+        add_action('wp_ajax_reloopin_launcher_earn_status', [$this, 'ajax_launcher_earn_status']);
+        add_action('wp_ajax_reloopin_save_birthday',        [$this, 'ajax_save_birthday']);
 
         // Cache invalidation
         add_action('woocommerce_payment_complete', [$this, 'invalidate_user_cache']);
@@ -134,6 +137,8 @@ class ReLoopin_Loyalty_Launcher
                 'earn_error'         => __('Could not load earn rules.', 'reloopin-loyalty'),
                 'redeem_error'       => __('Could not load redeem options.', 'reloopin-loyalty'),
                 'no_earn_rules'      => __('No earn rules available.', 'reloopin-loyalty'),
+                'already_earned'     => __('Already earned', 'reloopin-loyalty'),
+                'ready_to_earn'      => __('Ready to earn', 'reloopin-loyalty'),
             ],
         ]);
     }
@@ -320,6 +325,74 @@ class ReLoopin_Loyalty_Launcher
 
         set_transient($cache_key, $payload, 15 * MINUTE_IN_SECONDS);
         wp_send_json_success($payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Earn status (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_earn_status(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_success(['completed' => [], 'birthday_set' => false]);
+        }
+
+        $user_id   = get_current_user_id();
+        $cache_key = 'reloopin_earn_status_' . $user_id;
+        $cached    = get_transient($cache_key);
+
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+
+        $completed = ['signup']; // always done for any registered user
+
+        if (function_exists('wc_get_customer_order_count') && wc_get_customer_order_count($user_id) >= 1) {
+            $completed[] = 'first_order';
+        }
+
+        $birthday     = get_user_meta($user_id, '_reloopin_birthday', true); // "0000-MM-DD"
+        $birthday_set = !empty($birthday);
+        if ($birthday_set) {
+            $completed[] = 'birthday';
+        }
+
+        $payload = [
+            'completed'    => $completed,
+            'birthday_set' => $birthday_set,
+        ];
+
+        set_transient($cache_key, $payload, 5 * MINUTE_IN_SECONDS);
+        wp_send_json_success($payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Save birthday
+    // -----------------------------------------------------------------------
+
+    public function ajax_save_birthday(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        $month = isset($_POST['month']) ? (int) $_POST['month'] : 0;
+        $day   = isset($_POST['day'])   ? (int) $_POST['day']   : 0;
+
+        if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
+            wp_send_json_error(['message' => 'invalid_date']);
+        }
+
+        $user_id  = get_current_user_id();
+        $birthday = sprintf('0000-%02d-%02d', $month, $day);
+        update_user_meta($user_id, '_reloopin_birthday', $birthday);
+        delete_transient('reloopin_earn_status_' . $user_id);
+
+        wp_send_json_success();
     }
 
     // -----------------------------------------------------------------------
