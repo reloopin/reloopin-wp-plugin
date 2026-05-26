@@ -691,7 +691,7 @@
 
 /* History loading / empty / error */
 #rl-root .rl-hist-loading {
-  display: flex !important;
+  display: flex;
   justify-content: center !important;
   padding: 20px 0 !important;
 }
@@ -794,7 +794,7 @@
 @keyframes rlSpin { to { transform: rotate(360deg); } }
 
 #rl-root .rl-state-loading {
-  display: flex !important;
+  display: flex;
   align-items: center !important;
   justify-content: center !important;
   padding: 2rem 0 !important;
