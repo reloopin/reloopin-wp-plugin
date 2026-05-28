@@ -448,6 +448,7 @@
 #rl-root .ri-pur { background: #EDE9FF !important; }
 #rl-root .ri-amb { background: #FFFBEB !important; }
 #rl-root .ri-fuch { background: #F5F0FF !important; }
+#rl-root .rl-icon.rl-icon-muted { opacity: .45 !important; }
 
 #rl-root .rl-earn-body { flex: 1 !important; min-width: 0 !important; }
 #rl-root .rl-earn-title {
@@ -1258,6 +1259,21 @@
   font-weight: 400 !important;
   font-size: .72rem !important;
 }
+
+/* ── COUPON REVEAL (inline in campaign card after generation) ── */
+#rl-root .rl-coupon-reveal { width: 100% !important; padding: .3rem 0 .1rem !important; }
+#rl-root .rl-coupon-label  { font-size: .67rem !important; font-weight: 600 !important; color: #6054D0 !important; text-transform: uppercase !important; letter-spacing: .06em !important; margin-bottom: .4rem !important; display: block !important; }
+#rl-root .rl-coupon-box    { display: flex !important; align-items: center !important; gap: .5rem !important; background: #F4F2FE !important; border: 1.5px dashed rgba(96,84,208,.35) !important; border-radius: 8px !important; padding: .5rem .75rem !important; margin-bottom: .35rem !important; }
+#rl-root .rl-coupon-code   { flex: 1 !important; font-family: 'Courier New', monospace !important; font-size: .88rem !important; font-weight: 700 !important; color: #1C1917 !important; letter-spacing: .08em !important; word-break: break-all !important; }
+#rl-root .rl-coupon-copy-btn { display: inline-flex !important; align-items: center !important; gap: 4px !important; background: #fff !important; border: 1px solid rgba(96,84,208,.2) !important; border-radius: 6px !important; padding: .28rem .55rem !important; font-size: .65rem !important; font-weight: 600 !important; color: #6054D0 !important; cursor: pointer !important; font-family: 'Plus Jakarta Sans', sans-serif !important; transition: background .15s, border-color .15s !important; flex-shrink: 0 !important; }
+#rl-root .rl-coupon-copy-btn:hover { background: #EDE9FF !important; border-color: rgba(96,84,208,.4) !important; }
+#rl-root .rl-coupon-copy-btn.copied { color: #059669 !important; border-color: rgba(5,150,105,.3) !important; }
+#rl-root .rl-coupon-expires { display: block !important; font-size: .62rem !important; color: #9B96B0 !important; margin-top: .2rem !important; }
+#rl-root .rl-coupon-hint   { font-size: .62rem !important; color: #059669 !important; margin-top: .3rem !important; font-weight: 500 !important; display: block !important; }
+
+/* ── GENERATING SPINNER (small, inline in card right column) ── */
+#rl-root .rl-redeem-generating { display: flex !important; align-items: center !important; gap: .4rem !important; justify-content: flex-end !important; font-size: .67rem !important; color: #9B96B0 !important; }
+#rl-root .rl-spinner-sm        { width: 14px !important; height: 14px !important; border: 2px solid #EEEDF7 !important; border-top-color: #6054D0 !important; border-radius: 50% !important; animation: rlSpin .7s linear infinite !important; flex-shrink: 0 !important; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 600px) {

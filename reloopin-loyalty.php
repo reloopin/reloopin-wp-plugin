@@ -149,6 +149,13 @@ function reloopin_loyalty_get_settings()
             'default' => '',
         ],
         [
+            'title' => __('[TEMP] Bearer Token', 'reloopin-loyalty'),
+            'desc'  => __('<strong style="color:#b91c1c">Temporary — remove before production.</strong> Overrides the API Key as the <code>Authorization: Bearer</code> token for balance, history, rules, and tiers endpoints. Paste a short-lived JWT here for testing.', 'reloopin-loyalty'),
+            'id'    => 'reloopin_loyalty_bearer_token',
+            'type'  => 'password',
+            'default' => '',
+        ],
+        [
             'type' => 'sectionend',
             'id' => 'reloopin_loyalty_section_end',
         ],

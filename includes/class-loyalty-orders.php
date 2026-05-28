@@ -23,8 +23,12 @@ class ReLoopin_Loyalty_Orders
         $this->api = $api;
         $this->logger = wc_get_logger();
 
-        add_action('woocommerce_payment_complete', [$this, 'post_transaction'], 10, 1);
+        add_action('woocommerce_payment_complete',        [$this, 'post_transaction'], 10, 1);
         add_action('woocommerce_order_status_processing', [$this, 'post_transaction'], 10, 1);
+
+        // Track coupon redemptions for reLoopin-generated coupons (priority 20, after post_transaction)
+        add_action('woocommerce_payment_complete',        [$this, 'track_coupon_redemptions'], 20, 1);
+        add_action('woocommerce_order_status_processing', [$this, 'track_coupon_redemptions'], 20, 1);
     }
 
     public function post_transaction(int $order_id): void
@@ -147,6 +151,114 @@ class ReLoopin_Loyalty_Orders
             "\n" . implode("\n", $note_lines)
         ));
         $order->save_meta_data();
+    }
+
+    // -----------------------------------------------------------------------
+
+    /**
+     * Notify the reLoopin backend when a reLoopin-generated coupon is used at checkout.
+     * Only fires for coupons tagged with _reloopin_coupon=1 meta. Idempotent.
+     */
+    public function track_coupon_redemptions(int $order_id): void
+    {
+        reloopin_loyalty_debug("orders: track_coupon_redemptions triggered", ['order_id' => $order_id]);
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            reloopin_loyalty_debug("orders: order #{$order_id} not found — skipping coupon redemption");
+            return;
+        }
+
+        $coupon_codes = $order->get_coupon_codes();
+        if (empty($coupon_codes)) {
+            reloopin_loyalty_debug("orders: order #{$order_id} has no coupons — skipping");
+            return;
+        }
+
+        reloopin_loyalty_debug("orders: order #{$order_id} coupons found", $coupon_codes);
+
+        $posted = json_decode($order->get_meta('_loyalty_coupon_redemptions_posted') ?: '[]', true);
+        if (!is_array($posted)) {
+            $posted = [];
+        }
+
+        $customer_id    = (int) $order->get_customer_id();
+        $customer_email = $customer_id > 0
+            ? (($user = get_user_by('id', $customer_id)) ? $user->user_email : $order->get_billing_email())
+            : $order->get_billing_email();
+
+        if (empty($customer_email)) {
+            reloopin_loyalty_debug("orders: order #{$order_id} has no email — skipping coupon redemption");
+            return;
+        }
+
+        foreach ($coupon_codes as $code) {
+            if (in_array($code, $posted, true)) {
+                reloopin_loyalty_debug("orders: coupon {$code} already redeemed for order #{$order_id} — skipping");
+                continue;
+            }
+
+            $coupon_id = wc_get_coupon_id_by_code($code);
+            if (!$coupon_id) {
+                reloopin_loyalty_debug("orders: coupon {$code} not found in WC — skipping");
+                continue;
+            }
+
+            // Read meta via WC data store (not get_post_meta) for compatibility.
+            $wc_coupon    = new WC_Coupon($coupon_id);
+            $is_reloopin  = $wc_coupon->get_meta('_reloopin_coupon');
+
+            if ($is_reloopin !== '1') {
+                reloopin_loyalty_debug("orders: coupon {$code} is not a reLoopin coupon — skipping", [
+                    'coupon_id'    => $coupon_id,
+                    'meta_value'   => $is_reloopin,
+                ]);
+                continue;
+            }
+
+            // Use original-case code for the API (WC lowercases codes, API may be case-sensitive).
+            $original_code = $wc_coupon->get_meta('_reloopin_original_code');
+            $api_code      = !empty($original_code) ? $original_code : $code;
+
+            reloopin_loyalty_debug("orders: redeeming reLoopin coupon for order #{$order_id}", [
+                'wc_code'  => $code,
+                'api_code' => $api_code,
+            ]);
+
+            $result = $this->api->redeem_coupon(
+                $api_code,
+                $customer_email,
+                'WC-' . $order->get_order_number(),
+                number_format((float) $order->get_total(), 2, '.', ''),
+                get_woocommerce_currency()
+            );
+
+            if (is_wp_error($result)) {
+                reloopin_loyalty_debug("orders: coupon redeem API failed for order #{$order_id}", [
+                    'code'  => $code,
+                    'error' => $result->get_error_message(),
+                ]);
+                $this->logger->error(
+                    sprintf(
+                        'Loyalty: coupon redeem failed for order #%d code %s — %s',
+                        $order_id,
+                        $code,
+                        $result->get_error_message()
+                    ),
+                    ['source' => 'reloopin-loyalty']
+                );
+                continue;
+            }
+
+            $posted[] = $code;
+            $order->update_meta_data('_loyalty_coupon_redemptions_posted', json_encode($posted));
+            $order->save_meta_data();
+
+            reloopin_loyalty_debug("orders: coupon redeemed for order #{$order_id}", [
+                'code'          => $code,
+                'redemption_id' => $result['redemption_id'] ?? 'n/a',
+            ]);
+        }
     }
 
     // -----------------------------------------------------------------------

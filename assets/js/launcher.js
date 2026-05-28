@@ -42,6 +42,11 @@
   var toastTimer   = null;
   var userData     = null;
   var tiersData    = null;
+  var earnStatus       = null;   // { completed: string[], birthday_set: bool }
+  var earnStatusLoaded = false;
+  var currentRules     = [];     // module-level so birthday save can re-render
+  var campaignsLoaded  = false;
+  var campaignsData    = [];
 
   // ── DOM refs ───────────────────────────────────────────────────────────
   var root = document.getElementById('rl-root');
@@ -144,7 +149,7 @@
 
       // Lazy-load on first view
       if (name === 'earn' && !rulesLoaded) fetchRules();
-      if (name === 'redeem' && !rulesLoaded) fetchRules();
+      if (name === 'redeem' && !campaignsLoaded) fetchCampaigns();
       if (name === 'history' && !histLoaded) fetchHistory(1);
     });
   });
@@ -288,6 +293,8 @@
   }
 
   // ── Fetch rules ────────────────────────────────────────────────────────
+  var ONE_TIME_EVENTS = ['signup', 'first_order', 'birthday'];
+
   var EVENT_TYPE_CONFIG = {
     product_purchase:          { icon: 'cart',     color: 'grn',  label: 'Purchase rewards' },
     featured_product_purchase: { icon: 'cart',     color: 'grn',  label: 'Featured product bonus' },
@@ -320,30 +327,73 @@
     fuch: '#A855F7'
   };
 
+  function fetchEarnStatus(onDone) {
+    if (!isLoggedIn) {
+      earnStatus = { completed: [], birthday_set: false };
+      earnStatusLoaded = true;
+      if (onDone) onDone();
+      return;
+    }
+    ajaxPost('reloopin_launcher_earn_status', null, function (data) {
+      earnStatus = data || { completed: [], birthday_set: false };
+      earnStatusLoaded = true;
+      if (onDone) onDone();
+    }, function () {
+      earnStatus = { completed: [], birthday_set: false };
+      earnStatusLoaded = true;
+      if (onDone) onDone();
+    });
+  }
+
   function fetchRules() {
     var earnLoading = document.getElementById('rl-earn-loading');
     var earnContent = document.getElementById('rl-earn-content');
-    var redeemLoading = document.getElementById('rl-redeem-loading');
-    var redeemContent = document.getElementById('rl-redeem-content');
 
-    ajaxPost('reloopin_launcher_rules', null, function (rules) {
-      rulesLoaded = true;
-      renderEarnTab(rules || []);
-      renderRedeemTab(rules || []);
+    var rulesResult = null;
+    var rulesDone   = false;
+    var statusDone  = false;
+
+    function tryRender() {
+      if (!rulesDone || !statusDone) return;
+
+      rulesLoaded  = true;
+      currentRules = rulesResult || [];
+
+      renderEarnTab(currentRules);
+
       if (earnLoading) earnLoading.style.display = 'none';
       if (earnContent) earnContent.style.display = '';
-      if (redeemLoading) redeemLoading.style.display = 'none';
-      if (redeemContent) redeemContent.style.display = '';
 
-      // Update earn badge count
+      // Badge shows only "Ready to earn" rules
       var badge = document.getElementById('rl-earn-badge');
-      if (badge) badge.textContent = (rules || []).length;
+      if (badge) {
+        var completed = (earnStatus && earnStatus.completed) || [];
+        var readyCount = currentRules.filter(function (r) {
+          if (!r.is_active) return false;
+          var isOneTime = ONE_TIME_EVENTS.indexOf(r.event_type) !== -1;
+          return !(isOneTime && completed.indexOf(r.event_type) !== -1);
+        }).length;
+        badge.textContent = readyCount;
+      }
+    }
+
+    // Fire both fetches in parallel
+    ajaxPost('reloopin_launcher_rules', null, function (rules) {
+      rulesResult = rules || [];
+      rulesDone   = true;
+      tryRender();
     }, function () {
       rulesLoaded = true;
       if (earnLoading) earnLoading.style.display = 'none';
-      if (earnContent) { earnContent.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1rem 0">' + esc(t('earn_error')) + '</p>'; earnContent.style.display = ''; }
-      if (redeemLoading) redeemLoading.style.display = 'none';
-      if (redeemContent) { redeemContent.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1rem 0">' + esc(t('redeem_error')) + '</p>'; redeemContent.style.display = ''; }
+      if (earnContent) {
+        earnContent.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1rem 0">' + esc(t('earn_error')) + '</p>';
+        earnContent.style.display = '';
+      }
+    });
+
+    fetchEarnStatus(function () {
+      statusDone = true;
+      tryRender();
     });
   }
 
@@ -351,19 +401,58 @@
     var container = document.getElementById('rl-earn-content');
     if (!container) return;
 
+    var completed   = (earnStatus && earnStatus.completed) || [];
+    var alreadyDone = [];
+    var readyToEarn = [];
+
+    rules.filter(function (r) { return r.is_active; }).forEach(function (rule) {
+      var isOneTime = ONE_TIME_EVENTS.indexOf(rule.event_type) !== -1;
+      if (isOneTime && completed.indexOf(rule.event_type) !== -1) {
+        alreadyDone.push(rule);
+      } else {
+        readyToEarn.push(rule);
+      }
+    });
+
     var html = '';
 
-    // Group: Available to earn
-    var availRules = rules.filter(function (r) { return r.is_active; });
+    // ── Group 1: Already earned ────────────────────────────────────────
+    if (alreadyDone.length > 0) {
+      html += '<div class="rl-group"><span>' + esc(t('already_earned')) + '</span><span class="rl-group-line"></span></div>';
+      alreadyDone.forEach(function (rule) {
+        var cfg     = EVENT_TYPE_CONFIG[rule.event_type] || EVENT_TYPE_CONFIG.other;
+        var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="#A8A29E"');
 
-    if (availRules.length > 0) {
-      html += '<div class="rl-group"><span>' + esc(t('ways_to_earn')) + '</span><span class="rl-group-line"></span></div>';
-      availRules.forEach(function (rule) {
-        var cfg = EVENT_TYPE_CONFIG[rule.event_type] || EVENT_TYPE_CONFIG.other;
+        var ptsDisplay = rule.rule_type === 'multiplier'
+          ? t('x_pts', [rule.earn_rate])
+          : '+' + Number(rule.earn_rate || 0).toLocaleString() + ' pts';
+
+        var subtitle = rule.event_type === 'birthday'
+          ? t('annual_bonus')
+          : t('one_time_bonus');
+
+        html += '<div class="rl-earn used">' +
+          '<div class="rl-icon ri-' + esc(cfg.color) + ' rl-icon-muted">' + iconSvg + '</div>' +
+          '<div class="rl-earn-body">' +
+            '<div class="rl-earn-title" style="color:#A8A29E">' + esc(rule.name || cfg.label) + '</div>' +
+            '<div class="rl-earn-sub">' + esc(subtitle) + '</div>' +
+          '</div>' +
+          '<div class="rl-earn-r">' +
+            '<div class="rl-earn-pts muted">' + esc(ptsDisplay) + '</div>' +
+            '<div class="rl-pill rp-done">' + SVG_ICONS.check + ' ' + esc(t('collected')) + '</div>' +
+          '</div>' +
+        '</div>';
+      });
+    }
+
+    // ── Group 2: Ready to earn ─────────────────────────────────────────
+    if (readyToEarn.length > 0) {
+      html += '<div class="rl-group"' + (alreadyDone.length > 0 ? ' style="margin-top:.85rem"' : '') + '><span>' + esc(t('ready_to_earn')) + '</span><span class="rl-group-line"></span></div>';
+      readyToEarn.forEach(function (rule) {
+        var cfg         = EVENT_TYPE_CONFIG[rule.event_type] || EVENT_TYPE_CONFIG.other;
         var strokeColor = STROKE_COLORS[cfg.color] || '#6054D0';
-        var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
-        var isClickable = (rule.event_type === 'birthday' || rule.event_type === 'referral');
-        var clickAttr = '';
+        var iconSvg     = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
+        var clickAttr   = '';
         if (rule.event_type === 'birthday') clickAttr = ' style="cursor:pointer" data-action="birthday"';
         if (rule.event_type === 'referral') clickAttr = ' style="cursor:pointer" data-action="referral"';
 
@@ -376,19 +465,25 @@
           subtitle = rule.rule_type || '';
         }
 
-        var ptsDisplay = '';
-        if (rule.rule_type === 'multiplier') {
-          ptsDisplay = t('x_pts', [rule.earn_rate]);
-        } else {
-          ptsDisplay = '+' + Number(rule.earn_rate || 0).toLocaleString() + ' pts';
-        }
+        var ptsDisplay = rule.rule_type === 'multiplier'
+          ? t('x_pts', [rule.earn_rate])
+          : '+' + Number(rule.earn_rate || 0).toLocaleString() + ' pts';
+
+        var pillLabel = rule.event_type === 'birthday' ? esc(t('add_now'))
+          : rule.event_type === 'referral' ? esc(t('get_link'))
+          : esc(t('available'));
 
         html += '<div class="rl-earn avail"' + clickAttr + '>' +
           '<div class="rl-icon ri-' + esc(cfg.color) + '">' + iconSvg + '</div>' +
-          '<div class="rl-earn-body"><div class="rl-earn-title">' + esc(rule.name || cfg.label) + '</div><div class="rl-earn-sub">' + esc(subtitle) + '</div></div>' +
-          '<div class="rl-earn-r"><div class="rl-earn-pts earn">' + esc(ptsDisplay) + '</div>' +
-          (isClickable ? '<div class="rl-pill rp-avail">' + esc(rule.event_type === 'birthday' ? t('add_now') : t('get_link')) + '</div>' : '<div class="rl-pill rp-avail">' + esc(t('available')) + '</div>') +
-          '</div></div>';
+          '<div class="rl-earn-body">' +
+            '<div class="rl-earn-title">' + esc(rule.name || cfg.label) + '</div>' +
+            '<div class="rl-earn-sub">' + esc(subtitle) + '</div>' +
+          '</div>' +
+          '<div class="rl-earn-r">' +
+            '<div class="rl-earn-pts earn">' + esc(ptsDisplay) + '</div>' +
+            '<div class="rl-pill rp-avail">' + pillLabel + '</div>' +
+          '</div>' +
+        '</div>';
       });
     }
 
@@ -398,7 +493,7 @@
 
     container.innerHTML = html;
 
-    // Attach click handlers for birthday/referral
+    // Attach click handlers
     container.querySelectorAll('[data-action="birthday"]').forEach(function (el) {
       el.addEventListener('click', function () { openModal('rl-bday-modal'); });
     });
@@ -407,18 +502,172 @@
     });
   }
 
-  function renderRedeemTab(rules) {
+  // ── Campaigns (Redeem tab) ─────────────────────────────────────────────
+
+  function fetchCampaigns() {
+    var loading = document.getElementById('rl-redeem-loading');
+    var content = document.getElementById('rl-redeem-content');
+    if (loading) loading.style.display = '';
+    if (content) content.style.display = 'none';
+
+    ajaxPost('reloopin_launcher_campaigns', null, function (data) {
+      campaignsLoaded = true;
+      campaignsData   = data || [];
+      if (loading) loading.style.display = 'none';
+      if (content) content.style.display = '';
+      renderRedeemTab(campaignsData);
+    }, function () {
+      campaignsLoaded = true;
+      if (loading) loading.style.display = 'none';
+      if (content) {
+        content.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1rem 0">'
+          + esc(t('campaigns_error')) + '</p>';
+        content.style.display = '';
+      }
+    });
+  }
+
+  function renderRedeemTab(campaigns) {
     var container = document.getElementById('rl-redeem-content');
     if (!container) return;
 
-    // TODO: When the API provides dedicated redeem rules/rewards, render them here.
-    // For now, show a static placeholder message.
-    var pts = userData ? (userData.available_points || 0) : 0;
+    var pts  = userData ? (userData.available_points || 0) : 0;
+    var html = '<div class="rl-group"><span>'
+      + esc(t('redeem_your_points', [pts.toLocaleString()]))
+      + '</span><span class="rl-group-line"></span></div>';
 
-    var html = '<div class="rl-group"><span>' + esc(t('redeem_your_points', [pts.toLocaleString()])) + '</span><span class="rl-group-line"></span></div>';
-    html += '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1.5rem 0;line-height:1.6">' + esc(t('redeem_placeholder')) + '</p>';
+    if (!campaigns || campaigns.length === 0) {
+      html += '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1.5rem 0;line-height:1.6">'
+        + esc(t('no_campaigns')) + '</p>';
+      container.innerHTML = html;
+      return;
+    }
+
+    campaigns.forEach(function (camp) {
+      var canAfford  = pts >= camp.points_cost;
+      var stateClass = canAfford ? 'can' : 'cant';
+      var discount   = formatDiscount(camp.discount_type, camp.discount_value);
+      var rightHtml;
+
+      if (canAfford) {
+        rightHtml = '<div class="rl-redeem-cost">\u2212' + esc(String(Number(camp.points_cost).toLocaleString())) + ' pts</div>'
+          + '<div class="rl-redeem-val">' + esc(discount) + '</div>';
+      } else {
+        var needed = camp.points_cost - pts;
+        rightHtml = '<div class="rl-redeem-cost" style="color:#9B96B0">' + esc(String(Number(camp.points_cost).toLocaleString())) + ' pts</div>'
+          + '<div class="rl-redeem-need">' + esc(String(Number(needed).toLocaleString())) + ' ' + esc(t('pts_required')) + '</div>';
+      }
+
+      html += '<div class="rl-redeem ' + stateClass + '" data-campaign-id="' + esc(String(camp.id)) + '">'
+        + '<div class="rl-icon ri-fuch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>'
+        + '<div class="rl-redeem-body">'
+        + '<div class="rl-redeem-title">' + esc(camp.name) + '</div>'
+        + '<div class="rl-redeem-sub">' + esc(discount) + '</div>'
+        + '</div>'
+        + '<div class="rl-redeem-r">' + rightHtml + '</div>'
+        + '</div>';
+    });
 
     container.innerHTML = html;
+
+    container.querySelectorAll('.rl-redeem.can').forEach(function (card) {
+      card.addEventListener('click', function () {
+        var id = parseInt(card.getAttribute('data-campaign-id'), 10);
+        if (id) handleCouponGenerate(id, card);
+      });
+    });
+  }
+
+  function formatDiscount(type, value) {
+    var val = parseFloat(value) || 0;
+    if (type === 'fixed_amount' || type === 'fixed_cart') {
+      return '$' + val.toFixed(2) + ' ' + t('discount_off');
+    }
+    if (type === 'percentage' || type === 'percent') {
+      return val + '% ' + t('discount_off');
+    }
+    return value + ' ' + t('discount_off');
+  }
+
+  function handleCouponGenerate(campaignId, cardEl) {
+    if (cardEl.classList.contains('rl-loading')) return;
+    cardEl.classList.add('rl-loading');
+    cardEl.classList.remove('can');
+
+    var rightEl = cardEl.querySelector('.rl-redeem-r');
+    if (rightEl) {
+      rightEl.innerHTML = '<div class="rl-redeem-generating">'
+        + '<div class="rl-spinner-sm"></div>'
+        + '<span>' + esc(t('generating')) + '</span>'
+        + '</div>';
+    }
+
+    ajaxPost('reloopin_generate_coupon', { campaign_id: campaignId }, function (data) {
+      cardEl.classList.remove('rl-loading');
+      cardEl.innerHTML = buildCouponRevealHtml(data);
+      cardEl.style.flexDirection = 'column';
+      cardEl.style.alignItems    = 'stretch';
+      cardEl.style.cursor        = 'default';
+
+      var copyBtn = cardEl.querySelector('.rl-coupon-copy-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          copyCouponCode(data.code, copyBtn);
+        });
+      }
+    }, function () {
+      cardEl.classList.remove('rl-loading');
+      cardEl.classList.add('can');
+      renderRedeemTab(campaignsData);
+      showToast(t('coupon_error'));
+    });
+  }
+
+  function buildCouponRevealHtml(data) {
+    var discount   = formatDiscount(data.discount_type, data.discount_value);
+    var expiryHtml = '';
+    if (data.expires_at) {
+      var d = new Date(data.expires_at);
+      if (!isNaN(d.getTime())) {
+        expiryHtml = '<div class="rl-coupon-expires">' + esc(t('discount_expires')) + ' '
+          + esc(d.toLocaleDateString()) + '</div>';
+      }
+    }
+    return '<div class="rl-coupon-reveal">'
+      + '<div class="rl-coupon-label">' + esc(t('coupon_generated')) + ' \u2014 ' + esc(discount) + '</div>'
+      + '<div class="rl-coupon-box">'
+      + '<span class="rl-coupon-code">' + esc(data.code) + '</span>'
+      + '<button type="button" class="rl-coupon-copy-btn">'
+      + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+      + '<span class="rl-coupon-copy-label">' + esc(t('copy_code')) + '</span>'
+      + '</button>'
+      + '</div>'
+      + expiryHtml
+      + '<div class="rl-coupon-hint">' + esc(t('auto_applied')) + '</div>'
+      + '</div>';
+  }
+
+  function copyCouponCode(code, btnEl) {
+    var labelEl = btnEl ? btnEl.querySelector('.rl-coupon-copy-label') : null;
+    function onCopied() {
+      if (btnEl) btnEl.classList.add('copied');
+      if (labelEl) labelEl.textContent = t('copied');
+      showToast(t('coupon_copied', [code]));
+      setTimeout(function () {
+        if (btnEl) btnEl.classList.remove('copied');
+        if (labelEl) labelEl.textContent = t('copy_code');
+      }, 2200);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(code).then(onCopied).catch(function () {
+        fallbackCopy(code);
+        onCopied();
+      });
+    } else {
+      fallbackCopy(code);
+      onCopied();
+    }
   }
 
   // ── Fetch history ──────────────────────────────────────────────────────
@@ -443,7 +692,7 @@
 
     ajaxPost('reloopin_launcher_history', postData, function (data) {
       histLoaded = true;
-      var results = data.results || [];
+      var results = (data && data.results) || [];
 
       if (results.length === 0) {
         if (loading) loading.style.display = 'none';
@@ -588,9 +837,26 @@
         return;
       }
       if (err) err.classList.remove('show');
-      closeModal('rl-bday-modal');
-      // TODO: Save birthday via API
-      showToast(t('bday_saved'));
+
+      bdaySave.disabled = true;
+      ajaxPost('reloopin_save_birthday', { month: monthVal, day: dayVal }, function () {
+        closeModal('rl-bday-modal');
+        showToast(t('bday_saved'));
+
+        // Update in-memory earn status so re-render is instant
+        if (!earnStatus) earnStatus = { completed: [], birthday_set: false };
+        earnStatus.birthday_set = true;
+        if (earnStatus.completed.indexOf('birthday') === -1) {
+          earnStatus.completed.push('birthday');
+        }
+        renderEarnTab(currentRules);
+
+        bdaySave.disabled = false;
+      }, function () {
+        bdaySave.disabled = false;
+        showToast('Could not save birthday. Please try again.');
+      });
+      return;
     });
   }
 
@@ -662,8 +928,8 @@
   var applyBtn = document.getElementById('rl-apply-btn');
   if (applyBtn) {
     applyBtn.addEventListener('click', function () {
-      // TODO: Wire to actual redeem/checkout flow
-      showToast(t('apply_prompt'));
+      var redeemTab = root.querySelector('[data-tab="redeem"]');
+      if (redeemTab) redeemTab.click();
     });
   }
 

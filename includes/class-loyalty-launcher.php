@@ -33,6 +33,11 @@ class ReLoopin_Loyalty_Launcher
         add_action('wp_ajax_nopriv_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
         add_action('wp_ajax_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
         add_action('wp_ajax_nopriv_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
+
+        // Campaigns + coupon generation (logged-in only)
+        add_action('wp_ajax_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns']);
+        add_action('wp_ajax_reloopin_generate_coupon',    [$this, 'ajax_generate_coupon']);
+
         // Earn status + birthday save (logged-in only)
         add_action('wp_ajax_reloopin_launcher_earn_status', [$this, 'ajax_launcher_earn_status']);
         add_action('wp_ajax_reloopin_save_birthday',        [$this, 'ajax_save_birthday']);
@@ -56,6 +61,8 @@ class ReLoopin_Loyalty_Launcher
         if ($user_id > 0) {
             delete_transient('reloopin_bal_' . $user_id);
             delete_transient('reloopin_hist_' . $user_id . '_1');
+            delete_transient('reloopin_earn_status_' . $user_id);
+            delete_transient('reloopin_camps_' . $user_id);
         }
     }
 
@@ -139,6 +146,21 @@ class ReLoopin_Loyalty_Launcher
                 'no_earn_rules'      => __('No earn rules available.', 'reloopin-loyalty'),
                 'already_earned'     => __('Already earned', 'reloopin-loyalty'),
                 'ready_to_earn'      => __('Ready to earn', 'reloopin-loyalty'),
+                'collected'          => __('Collected', 'reloopin-loyalty'),
+                'annual_bonus'       => __('Annual bonus active', 'reloopin-loyalty'),
+                'campaigns_error'    => __('Could not load rewards.', 'reloopin-loyalty'),
+                'no_campaigns'       => __('No rewards available yet. Keep earning points!', 'reloopin-loyalty'),
+                'generating'         => __('Generating\xe2\x80\xa6', 'reloopin-loyalty'),
+                'coupon_generated'   => __('Coupon generated!', 'reloopin-loyalty'),
+                /* translators: %s: coupon code */
+                'coupon_copied'      => __('Coupon %s copied!', 'reloopin-loyalty'),
+                'coupon_error'       => __('Could not generate coupon. Please try again.', 'reloopin-loyalty'),
+                'pts_required'       => __('pts required', 'reloopin-loyalty'),
+                'copy_code'          => __('Copy', 'reloopin-loyalty'),
+                'copied'             => __('Copied!', 'reloopin-loyalty'),
+                'discount_expires'   => __('Expires', 'reloopin-loyalty'),
+                'discount_off'       => __('off', 'reloopin-loyalty'),
+                'auto_applied'       => __('Applied automatically at checkout', 'reloopin-loyalty'),
             ],
         ]);
     }
@@ -167,7 +189,11 @@ class ReLoopin_Loyalty_Launcher
         $balance_data = $this->api->get_balance($user->user_email);
 
         if (is_wp_error($balance_data)) {
-            wp_send_json_error(['message' => __('Could not fetch points balance.', 'reloopin-loyalty')]);
+            wp_send_json_error([
+                'message' => __('Could not fetch points balance.', 'reloopin-loyalty'),
+                'debug'   => $balance_data->get_error_message(),
+                'code'    => $balance_data->get_error_code(),
+            ]);
         }
 
         $display_name = $user->display_name ?: $user->first_name ?: $user->user_login;
@@ -325,6 +351,175 @@ class ReLoopin_Loyalty_Launcher
 
         set_transient($cache_key, $payload, 15 * MINUTE_IN_SECONDS);
         wp_send_json_success($payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Campaigns (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_campaigns(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        $user_id   = get_current_user_id();
+        $cache_key = 'reloopin_camps_' . $user_id;
+        $cached    = get_transient($cache_key);
+
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+
+        // Read available_points from the balance transient populated by ajax_launcher_data().
+        // If not yet cached, pass 0 — JS applies client-side eligibility via userData anyway.
+        $bal_cached       = get_transient('reloopin_bal_' . $user_id);
+        $available_points = (int) ($bal_cached['available_points'] ?? 0);
+
+        $data = $this->api->get_campaigns($available_points);
+
+        if (is_wp_error($data)) {
+            wp_send_json_error(['message' => $data->get_error_message()]);
+        }
+
+        $campaigns = is_array($data) && isset($data[0]) ? $data : ($data['results'] ?? $data);
+
+        $payload = array_map(function (array $c): array {
+            return [
+                'id'             => (int)    ($c['id']             ?? 0),
+                'name'           => (string) ($c['name']           ?? ''),
+                'campaign_type'  => (string) ($c['campaign_type']  ?? ''),
+                'points_cost'    => (int)    ($c['points_cost']    ?? 0),
+                'discount_type'  => (string) ($c['discount_type']  ?? ''),
+                'discount_value' => (string) ($c['discount_value'] ?? '0'),
+            ];
+        }, is_array($campaigns) ? $campaigns : []);
+
+        set_transient($cache_key, $payload, 5 * MINUTE_IN_SECONDS);
+        wp_send_json_success($payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Generate coupon (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_generate_coupon(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        $campaign_id = absint(wp_unslash($_POST['campaign_id'] ?? 0));
+        if ($campaign_id <= 0) {
+            wp_send_json_error(['message' => 'invalid_campaign']);
+        }
+
+        $user         = wp_get_current_user();
+        $customer_ref = $user->user_email;
+
+        $result = $this->api->generate_coupon($campaign_id, $customer_ref);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        $code = sanitize_text_field($result['code'] ?? '');
+        if (empty($code)) {
+            wp_send_json_error(['message' => 'no_code']);
+        }
+
+        // Create a WooCommerce coupon so the customer can apply it at checkout.
+        $this->apply_wc_coupon($code, $result, $customer_ref);
+
+        // Invalidate campaigns cache — balance may change after generation.
+        delete_transient('reloopin_camps_' . get_current_user_id());
+
+        wp_send_json_success([
+            'code'           => $code,
+            'discount_type'  => $result['discount_type']  ?? '',
+            'discount_value' => $result['discount_value'] ?? '',
+            'expires_at'     => $result['expires_at']     ?? '',
+        ]);
+    }
+
+    /**
+     * Create a WooCommerce coupon post for a generated reLoopin coupon code.
+     * Tags it with _reloopin_coupon=1 so checkout redemption can detect it.
+     */
+    private function apply_wc_coupon(string $code, array $api_data, string $customer_ref): void
+    {
+        reloopin_loyalty_debug('apply_wc_coupon → called', ['code' => $code]);
+
+        if (!function_exists('wc_get_coupon_id_by_code')) {
+            reloopin_loyalty_debug('apply_wc_coupon → wc_get_coupon_id_by_code not available');
+            return;
+        }
+
+        $existing = wc_get_coupon_id_by_code($code);
+        if ($existing > 0) {
+            reloopin_loyalty_debug('apply_wc_coupon → coupon already exists, adding meta to existing', [
+                'coupon_id' => $existing,
+            ]);
+            // Coupon exists but may be missing our meta — set it now.
+            $existing_coupon = new WC_Coupon($existing);
+            if ($existing_coupon->get_meta('_reloopin_coupon') !== '1') {
+                $existing_coupon->update_meta_data('_reloopin_coupon',        '1');
+                $existing_coupon->update_meta_data('_reloopin_campaign_id',   (int) ($api_data['campaign_id'] ?? 0));
+                $existing_coupon->update_meta_data('_reloopin_original_code', $code);
+                $existing_coupon->save();
+            }
+            return;
+        }
+
+        $wc_type = in_array($api_data['discount_type'] ?? '', ['percentage', 'percent'], true)
+            ? 'percent'
+            : 'fixed_cart';
+
+        $coupon = new WC_Coupon();
+        $coupon->set_code($code);
+        $coupon->set_discount_type($wc_type);
+        $coupon->set_amount((float) ($api_data['discount_value'] ?? 0));
+        $coupon->set_usage_limit(1);
+        $coupon->set_usage_limit_per_user(1);
+        $coupon->set_email_restrictions([$customer_ref]);
+
+        if (!empty($api_data['expires_at'])) {
+            $expires = strtotime($api_data['expires_at']);
+            if ($expires > 0) {
+                $coupon->set_date_expires($expires);
+            }
+        }
+
+        // Step 1: Create the coupon post first.
+        $coupon_id = $coupon->save();
+
+        reloopin_loyalty_debug('apply_wc_coupon → coupon created', [
+            'coupon_id' => $coupon_id,
+            'code'      => $code,
+        ]);
+
+        if (!$coupon_id) {
+            return;
+        }
+
+        // Step 2: Reload from DB, add meta, save again (uses WC update path).
+        $saved_coupon = new WC_Coupon($coupon_id);
+        $saved_coupon->update_meta_data('_reloopin_coupon',        '1');
+        $saved_coupon->update_meta_data('_reloopin_campaign_id',   (int) ($api_data['campaign_id'] ?? 0));
+        $saved_coupon->update_meta_data('_reloopin_original_code', $code);
+        $saved_coupon->save();
+
+        // Step 3: Verify.
+        $verify_coupon = new WC_Coupon($coupon_id);
+        $verify = $verify_coupon->get_meta('_reloopin_coupon');
+        reloopin_loyalty_debug('apply_wc_coupon → meta verify', [
+            'coupon_id'        => $coupon_id,
+            '_reloopin_coupon' => $verify,
+        ]);
     }
 
     // -----------------------------------------------------------------------

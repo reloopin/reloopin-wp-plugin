@@ -23,14 +23,18 @@ class ReLoopin_Loyalty_API
     private string $merchant_id;
     private string $merchant_code;
     private string $currency_code;
+    private string $bearer_token; // TODO: TEMP — remove before production
 
     public function __construct()
     {
-        $this->base_url = rtrim(get_option('reloopin_loyalty_api_url', ''), '/');
-        $this->api_key = get_option('reloopin_loyalty_api_key', '');
-        $this->merchant_id = get_option('reloopin_loyalty_merchant_id', '');
+        $this->base_url      = rtrim(get_option('reloopin_loyalty_api_url', ''), '/');
+        $this->api_key       = get_option('reloopin_loyalty_api_key', '');
+        $this->merchant_id   = get_option('reloopin_loyalty_merchant_id', '');
         $this->merchant_code = get_option('reloopin_loyalty_merchant_code', '');
         $this->currency_code = get_woocommerce_currency();
+        // TODO: TEMP — bearer_token overrides api_key for Authorization header; remove before production
+        $bearer_override     = get_option('reloopin_loyalty_bearer_token', '');
+        $this->bearer_token  = !empty($bearer_override) ? $bearer_override : $this->api_key;
     }
 
     // -----------------------------------------------------------------------
@@ -101,9 +105,9 @@ class ReLoopin_Loyalty_API
         reloopin_loyalty_debug('get_balance → request', ['customer_ref' => $customer_ref]);
 
         return $this->get('/api/v1/merchant/points/customer/balance', [
-            'merchant_id' => $this->merchant_id,
+            'merchant_id'  => $this->merchant_id,
             'customer_ref' => $customer_ref,
-        ]);
+        ], $this->platform_headers());
     }
 
     /**
@@ -166,6 +170,76 @@ class ReLoopin_Loyalty_API
     }
 
     /**
+     * Get campaigns eligible for the customer's current points balance.
+     *
+     * @param int $customer_points Customer's available points.
+     */
+    public function get_campaigns(int $customer_points): array|WP_Error
+    {
+
+        $endpoint = '/api/v1/external/campaigns?merchant_id=' . rawurlencode($this->merchant_id) . '&campaign_type=ONE_TIME_CAMPAIGN&customer_points=' . $customer_points . '&active_only=false';
+
+        reloopin_loyalty_debug('get_campaigns → request', ['customer_points' => $customer_points]);
+
+        $result = $this->get($endpoint, [], $this->coupon_headers());
+
+        // 404 means no campaigns are configured for this merchant yet — return empty.
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data('loyalty_api_error');
+            if (isset($data['status']) && (int) $data['status'] === 404) {
+                return [];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Generate a coupon code for a campaign.
+     *
+     * Response: code, campaign_id, customer_ref, expires_at, discount_type, discount_value
+     */
+    public function generate_coupon(int $campaign_id, string $customer_ref): array|WP_Error
+    {
+        reloopin_loyalty_debug('generate_coupon → request', [
+            'campaign_id'  => $campaign_id,
+            'customer_ref' => $customer_ref,
+        ]);
+
+        return $this->post('/api/v1/external/coupons/generate', [
+            'campaign_id'  => $campaign_id,
+            'customer_ref' => $customer_ref,
+        ], $this->coupon_headers());
+    }
+
+    /**
+     * Notify the backend that a generated coupon was used at checkout.
+     */
+    public function redeem_coupon(
+        string $code,
+        string $customer_ref,
+        string $order_ref,
+        string $order_total,
+        string $currency_code
+    ): array|WP_Error {
+        reloopin_loyalty_debug('redeem_coupon → request', [
+            'code'          => $code,
+            'customer_ref'  => $customer_ref,
+            'order_ref'     => $order_ref,
+            'order_total'   => $order_total,
+            'currency_code' => $currency_code,
+        ]);
+
+        return $this->post('/api/v1/external/coupons/redeem', [
+            'code'          => $code,
+            'customer_ref'  => $customer_ref,
+            'order_ref'     => $order_ref,
+            'order_total'   => $order_total,
+            'currency_code' => $currency_code,
+        ], $this->coupon_headers());
+    }
+
+    /**
      * Redeem (deduct) points from a customer's balance.
      *
      * @param int         $points  Must be > 0.
@@ -196,7 +270,7 @@ class ReLoopin_Loyalty_API
     // Private HTTP helpers
     // -----------------------------------------------------------------------
 
-    private function get(string $endpoint, array $query_params = []): array|WP_Error
+    private function get(string $endpoint, array $query_params = [], array $headers = []): array|WP_Error
     {
         if (empty($this->base_url)) {
             reloopin_loyalty_debug('GET aborted — API URL not configured', $endpoint);
@@ -205,10 +279,10 @@ class ReLoopin_Loyalty_API
 
         $url = add_query_arg($query_params, $this->base_url . $endpoint);
 
-        reloopin_loyalty_debug("GET {$endpoint}");
+        reloopin_loyalty_debug("GET {$url}");
 
         $response = wp_remote_get($url, [
-            'headers' => $this->bearer_headers(),
+            'headers' => $headers ?: $this->bearer_headers(),
             'timeout' => 10,
         ]);
 
@@ -225,7 +299,7 @@ class ReLoopin_Loyalty_API
         reloopin_loyalty_debug("POST {$this->base_url}{$endpoint}");
 
         $response = wp_remote_post($this->base_url . $endpoint, [
-            'headers' => $headers ?: $this->bearer_headers(),
+            'headers' => $headers ?: $this->platform_headers(),
             'body' => wp_json_encode($body),
             'timeout' => 10,
         ]);
@@ -255,13 +329,23 @@ class ReLoopin_Loyalty_API
         ];
     }
 
+    /** Headers for coupon/campaign endpoints: reloopin_api_key only. */
+    private function coupon_headers(): array
+    {
+        return [
+            'reloopin_api_key' => $this->api_key,
+            'Content-Type'     => 'application/json',
+            'Accept'           => 'application/json',
+        ];
+    }
+
     /** Headers for all other endpoints: standard Bearer token. */
     private function bearer_headers(): array
     {
         return [
-            'Authorization' => 'Bearer ' . $this->api_key,
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
+            'Authorization' => 'Bearer ' . $this->bearer_token, // TODO: TEMP — remove this bearer token after api key endpoints are finished
+            'Content-Type'  => 'application/json',
+            'Accept'        => 'application/json',
         ];
     }
 
