@@ -7,7 +7,7 @@
  * Endpoints used:
  *   POST /api/v1/merchant/transaction-entry   — post a transaction (auto-awards points)
  *   GET  /api/v1/merchant/points/customer/balance      — get customer balance + tier
- *   GET  /api/v1/merchant/points/history      — get paginated ledger
+ *   GET  /api/v1/external/merchant/points/history      — get paginated ledger
  *   POST /api/v1/merchant/points/redeem       — deduct points from balance
  */
 
@@ -130,7 +130,7 @@ class ReLoopin_Loyalty_API
 
         reloopin_loyalty_debug('get_history → request', $params);
 
-        return $this->get('/api/v1/merchant/points/history', $params);
+        return $this->get('/api/v1/external/merchant/points/history', $params);
     }
 
     /**
@@ -141,10 +141,10 @@ class ReLoopin_Loyalty_API
     public function get_rules(?string $event_type = null): array|WP_Error
     {
         if ($event_type !== null) {
-            $endpoint = '/api/v1/merchant/points/rules/event/' . urlencode($event_type);
+            $endpoint = '/api/v1/external/merchant/points/rules/event/' . urlencode($event_type);
             $params = ['merchant_id' => $this->merchant_id];
         } else {
-            $endpoint = '/api/v1/merchant/points/rules/';
+            $endpoint = '/api/v1/external/merchant/points/rules/';
             $params = [
                 'merchant_id' => $this->merchant_id,
                 'active_only' => 'true',

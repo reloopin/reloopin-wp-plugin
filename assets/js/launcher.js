@@ -72,6 +72,12 @@
     });
     var nameEl = document.getElementById('rl-user-name');
     if (nameEl) nameEl.textContent = t('welcome_back', [reloopinLauncher.user_first_name || '']);
+
+    // Preload: if PHP passed cached balance data, apply it immediately
+    if (reloopinLauncher.preloaded_data && reloopinLauncher.preloaded_data.logged_in) {
+      applyUserData(reloopinLauncher.preloaded_data);
+      dataLoaded = true;
+    }
   } else {
     elLoggedin.style.display = 'none';
     elGuest.style.display = '';
@@ -83,7 +89,13 @@
     if (panelOpen) {
       panel.classList.add('open');
       if (hint) hint.style.display = 'none';
-      if (!dataLoaded) fetchData();
+      if (!dataLoaded) {
+        fetchData();
+      } else {
+        // Data was preloaded — still need to lazy-load tiers + rules on first open
+        if (!tiersLoaded) fetchTiers();
+        if (!rulesLoaded) fetchRules();
+      }
     } else {
       panel.classList.remove('open');
     }
@@ -186,55 +198,55 @@
     xhr.send(data);
   }
 
+  // ── Apply user/balance data to UI ───────────────────────────────────────
+  function applyUserData(data) {
+    userData = data;
+
+    var nameEl = document.getElementById('rl-user-name');
+    if (nameEl) nameEl.textContent = t('welcome_back', [data.name || '']);
+
+    var avEls = [document.getElementById('rl-user-av'), document.getElementById('rl-launcher-av')];
+    avEls.forEach(function (el) {
+      if (el) el.textContent = data.initials || '';
+    });
+
+    var pts = Number(data.available_points || 0);
+    var ptsNum = document.getElementById('rl-pts-num');
+    if (ptsNum) ptsNum.textContent = pts.toLocaleString();
+
+    var launcherPts = document.getElementById('rl-launcher-pts');
+    if (launcherPts) launcherPts.textContent = pts.toLocaleString() + ' pts';
+
+    var hintPts = root.querySelector('.rl-hint-pts');
+    if (hintPts) hintPts.textContent = pts.toLocaleString() + ' pts';
+
+    var hsEarned = document.getElementById('rl-hs-earned');
+    if (hsEarned) hsEarned.textContent = '+' + Number(data.lifetime_points || 0).toLocaleString();
+    var hsRedeemed = document.getElementById('rl-hs-redeemed');
+    if (hsRedeemed) hsRedeemed.textContent = '-' + Number(data.redeemed_points || 0).toLocaleString();
+    var hsBalance = document.getElementById('rl-hs-balance');
+    if (hsBalance) hsBalance.textContent = pts.toLocaleString();
+
+    if (data.tier) {
+      var tierBadge = document.getElementById('rl-tier-badge');
+      var tierName = document.getElementById('rl-tier-name');
+      if (tierBadge && tierName) {
+        tierName.textContent = capitalize(data.tier);
+        tierBadge.style.display = '';
+      }
+    }
+
+    var refText = document.getElementById('rl-ref-link-text');
+    if (refText && data.referral_url) refText.textContent = data.referral_url;
+  }
+
   // ── Fetch balance data ─────────────────────────────────────────────────
   function fetchData() {
     dataLoaded = true; // prevent double-fire on rapid clicks
     ajaxPost('reloopin_launcher_data', null, function (data) {
       if (!data.logged_in) return;
 
-      userData = data;
-
-      // Update header
-      var nameEl = document.getElementById('rl-user-name');
-      if (nameEl) nameEl.textContent = t('welcome_back', [data.name || '']);
-
-      var avEls = [document.getElementById('rl-user-av'), document.getElementById('rl-launcher-av')];
-      avEls.forEach(function (el) {
-        if (el) el.textContent = data.initials || '';
-      });
-
-      // Points
-      var pts = Number(data.available_points || 0);
-      var ptsNum = document.getElementById('rl-pts-num');
-      if (ptsNum) ptsNum.textContent = pts.toLocaleString();
-
-      var launcherPts = document.getElementById('rl-launcher-pts');
-      if (launcherPts) launcherPts.textContent = pts.toLocaleString() + ' pts';
-
-      var hintPts = root.querySelector('.rl-hint-pts');
-      if (hintPts) hintPts.textContent = pts.toLocaleString() + ' pts';
-
-      // History summary cards
-      var hsEarned = document.getElementById('rl-hs-earned');
-      if (hsEarned) hsEarned.textContent = '+' + Number(data.lifetime_points || 0).toLocaleString();
-      var hsRedeemed = document.getElementById('rl-hs-redeemed');
-      if (hsRedeemed) hsRedeemed.textContent = '-' + Number(data.redeemed_points || 0).toLocaleString();
-      var hsBalance = document.getElementById('rl-hs-balance');
-      if (hsBalance) hsBalance.textContent = pts.toLocaleString();
-
-      // Tier badge
-      if (data.tier) {
-        var tierBadge = document.getElementById('rl-tier-badge');
-        var tierName = document.getElementById('rl-tier-name');
-        if (tierBadge && tierName) {
-          tierName.textContent = capitalize(data.tier);
-          tierBadge.style.display = '';
-        }
-      }
-
-      // Referral URL
-      var refText = document.getElementById('rl-ref-link-text');
-      if (refText && data.referral_url) refText.textContent = data.referral_url;
+      applyUserData(data);
 
       // Load tiers + rules
       if (!tiersLoaded) fetchTiers();
