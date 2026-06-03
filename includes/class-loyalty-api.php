@@ -8,7 +8,6 @@
  *   POST /api/v1/merchant/transaction-entry   — post a transaction (auto-awards points)
  *   GET  /api/v1/merchant/points/customer/balance      — get customer balance + tier
  *   GET  /api/v1/external/merchant/points/history      — get paginated ledger
- *   POST /api/v1/merchant/points/redeem       — deduct points from balance
  */
 
 if (!defined('ABSPATH')) {
@@ -23,7 +22,6 @@ class ReLoopin_Loyalty_API
     private string $merchant_id;
     private string $merchant_code;
     private string $currency_code;
-    private string $bearer_token; // TODO: TEMP — remove before production
 
     public function __construct()
     {
@@ -32,9 +30,6 @@ class ReLoopin_Loyalty_API
         $this->merchant_id   = get_option('reloopin_loyalty_merchant_id', '');
         $this->merchant_code = get_option('reloopin_loyalty_merchant_code', '');
         $this->currency_code = get_woocommerce_currency();
-        // TODO: TEMP — bearer_token overrides api_key for Authorization header; remove before production
-        $bearer_override     = get_option('reloopin_loyalty_bearer_token', '');
-        $this->bearer_token  = !empty($bearer_override) ? $bearer_override : $this->api_key;
     }
 
     // -----------------------------------------------------------------------
@@ -84,6 +79,7 @@ class ReLoopin_Loyalty_API
             'email'       => $email,
             'first_name'  => $first_name ?: 'N/A',
             'last_name'   => $last_name ?: 'N/A',
+            'date_of_birth' => '2026-01-01',
         ];
 
         if (!empty($phone)) {
@@ -140,33 +136,24 @@ class ReLoopin_Loyalty_API
      */
     public function get_rules(?string $event_type = null): array|WP_Error
     {
+        // The launcher consumes the full rule set at once (cached + filtered client-side),
+        // so request a single large page. The backend requires page + page_size (HTTP 422 otherwise).
+        $params = [
+            'merchant_id' => $this->merchant_id,
+            'page'        => 1,
+            'page_size'   => 100,
+        ];
+
         if ($event_type !== null) {
             $endpoint = '/api/v1/external/merchant/points/rules/event/' . urlencode($event_type);
-            $params = ['merchant_id' => $this->merchant_id];
         } else {
             $endpoint = '/api/v1/external/merchant/points/rules/';
-            $params = [
-                'merchant_id' => $this->merchant_id,
-                'active_only' => 'true',
-            ];
+            $params['active_only'] = 'true';
         }
 
         reloopin_loyalty_debug('get_rules → request', $params);
 
         return $this->get($endpoint, $params);
-    }
-
-    /**
-     * Get tier configurations for the merchant.
-     */
-    public function get_tiers(): array|WP_Error
-    {
-        reloopin_loyalty_debug('get_tiers → request');
-
-        return $this->get('/api/v1/merchant/tiers/', [
-            'merchant_id' => $this->merchant_id,
-            'active_only' => 'true',
-        ]);
     }
 
     /**
@@ -239,33 +226,6 @@ class ReLoopin_Loyalty_API
         ], $this->coupon_headers());
     }
 
-    /**
-     * Redeem (deduct) points from a customer's balance.
-     *
-     * @param int         $points  Must be > 0.
-     * @param string|null $notes   Optional note.
-     */
-    public function redeem_points(string $customer_ref, int $points, ?string $notes = null): array|WP_Error
-    {
-        $body = [
-            'merchant_id' => $this->merchant_id,
-            'customer_ref' => $customer_ref,
-            'points' => $points,
-        ];
-
-        if ($notes !== null) {
-            $body['notes'] = $notes;
-        }
-
-        reloopin_loyalty_debug('redeem_points → request', [
-            'customer_ref' => $customer_ref,
-            'points' => $points,
-            'notes' => $notes,
-        ]);
-
-        return $this->post('/api/v1/merchant/points/redeem', $body);
-    }
-
     // -----------------------------------------------------------------------
     // Private HTTP helpers
     // -----------------------------------------------------------------------
@@ -277,12 +237,13 @@ class ReLoopin_Loyalty_API
             return new WP_Error('loyalty_no_url', 'Loyalty API URL is not configured.');
         }
 
-        $url = add_query_arg($query_params, $this->base_url . $endpoint);
+        $url     = add_query_arg($query_params, $this->base_url . $endpoint);
+        $headers = $headers ?: $this->platform_headers();
 
         reloopin_loyalty_debug("GET {$url}");
 
         $response = wp_remote_get($url, [
-            'headers' => $headers ?: $this->bearer_headers(),
+            'headers' => $headers,
             'timeout' => 10,
         ]);
 
@@ -336,16 +297,6 @@ class ReLoopin_Loyalty_API
             'reloopin_api_key' => $this->api_key,
             'Content-Type'     => 'application/json',
             'Accept'           => 'application/json',
-        ];
-    }
-
-    /** Headers for all other endpoints: standard Bearer token. */
-    private function bearer_headers(): array
-    {
-        return [
-            'Authorization' => 'Bearer ' . $this->bearer_token, // TODO: TEMP — remove this bearer token after api key endpoints are finished
-            'Content-Type'  => 'application/json',
-            'Accept'        => 'application/json',
         ];
     }
 

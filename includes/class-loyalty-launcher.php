@@ -3,9 +3,9 @@
  * Loyalty Launcher Widget
  *
  * Renders the floating launcher widget matching the reloopin_widget.html design.
- * Features: tabbed Earn/Redeem/History, tier progress, modals, toast notifications.
+ * Features: tabbed Earn/Redeem/History, tier badge, modals, toast notifications.
  *
- * Dynamic data (balance, history, rules, tiers) is loaded via AJAX on first open.
+ * Dynamic data (balance, history, rules) is loaded via AJAX on first open.
  * Guest users see a sign-up CTA linking to WP login/register pages.
  */
 
@@ -37,8 +37,6 @@ class ReLoopin_Loyalty_Launcher
         add_action('wp_ajax_reloopin_launcher_history', [$this, 'ajax_launcher_history']);
         add_action('wp_ajax_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
         add_action('wp_ajax_nopriv_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
-        add_action('wp_ajax_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
-        add_action('wp_ajax_nopriv_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
 
         // Campaigns + coupon generation (logged-in only)
         add_action('wp_ajax_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns']);
@@ -190,21 +188,6 @@ class ReLoopin_Loyalty_Launcher
             'is_active'  => (bool) ($rule['is_active'] ?? false),
             'conditions' => $rule['conditions'] ?? null,
         ], $this->normalize_api_list($data));
-    }
-
-    private function transform_tiers(array $data): array
-    {
-        $tiers = array_map(fn(array $tier): array => [
-            'tier_name'  => $tier['tier_name'] ?? '',
-            'min_points' => (int) ($tier['min_points'] ?? 0),
-            'max_points' => isset($tier['max_points']) ? (int) $tier['max_points'] : null,
-            'multiplier' => (float) ($tier['multiplier'] ?? 1),
-            'benefits'   => $tier['benefits'] ?? null,
-            'is_active'  => (bool) ($tier['is_active'] ?? false),
-        ], $this->normalize_api_list($data));
-
-        usort($tiers, fn($a, $b) => $a['min_points'] <=> $b['min_points']);
-        return $tiers;
     }
 
     private function transform_history(array $data, int $page): array
@@ -474,22 +457,6 @@ class ReLoopin_Loyalty_Launcher
     }
 
     // -----------------------------------------------------------------------
-    // AJAX: Tiers
-    // -----------------------------------------------------------------------
-
-    public function ajax_launcher_tiers(): void
-    {
-        $merchant_id = get_option('reloopin_loyalty_merchant_id', '');
-        $this->ajax_cached(
-            'tiers',
-            $this->cache_key('tiers', $merchant_id),
-            self::CACHE_TTL_LONG,
-            fn() => $this->api->get_tiers(),
-            fn(array $data) => $this->transform_tiers($data),
-        );
-    }
-
-    // -----------------------------------------------------------------------
     // AJAX: Campaigns (logged-in only)
     // -----------------------------------------------------------------------
 
@@ -752,6 +719,10 @@ class ReLoopin_Loyalty_Launcher
               <svg width="9" height="9" viewBox="0 0 24 24" fill="#D97706" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               <span id="rl-tier-name"></span>
             </div>
+            <?php // TODO(next-tier UI): the balance endpoint only returns the current tier name (rendered in #rl-tier-badge above). ?>
+            <?php // The progress-to-next-tier bar below needs per-tier min_points thresholds, which the tiers endpoint used to ?>
+            <?php // provide. Re-wire #rl-prog-wrap / #rl-tier-row (and the at_pts / pts_to i18n strings) once that data is ?>
+            <?php // exposed (e.g. next_tier + points_to_next on the balance response). Kept hidden until then. ?>
             <div class="rl-prog-wrap" id="rl-prog-wrap" style="display:none">
               <div class="rl-prog-track"><div class="rl-prog-fill" id="rl-prog-fill"></div></div>
               <div class="rl-prog-lbl" id="rl-prog-lbl"></div>
@@ -760,6 +731,7 @@ class ReLoopin_Loyalty_Launcher
         </div>
       </div>
 
+      <?php // TODO(next-tier UI): hidden until per-tier min_points thresholds are available again — see note above. ?>
       <div class="rl-tier-row" id="rl-tier-row" style="display:none">
         <div class="rl-tier-labels">
           <span id="rl-tier-current-label"></span>

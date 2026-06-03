@@ -4,7 +4,7 @@
  * Vanilla JS (no jQuery). Handles:
  *  - Logged-in / guest state toggle
  *  - Panel open/close with animations
- *  - Lazy data fetch on first open (balance, rules, tiers, history)
+ *  - Lazy data fetch on first open (balance, rules, history)
  *  - Tabbed navigation: Earn, Redeem, History
  *  - History pagination and filters
  *  - Birthday & referral modals
@@ -35,13 +35,11 @@
   var guestOpen    = false;
   var dataLoaded   = false;
   var rulesLoaded  = false;
-  var tiersLoaded  = false;
   var histLoaded   = false;
   var historyPage  = 1;
   var historyFilter = '';
   var toastTimer   = null;
   var userData     = null;
-  var tiersData    = null;
   var earnStatus       = null;   // { completed: string[], birthday_set: bool }
   var earnStatusLoaded = false;
   var currentRules     = [];     // module-level so birthday save can re-render
@@ -92,8 +90,7 @@
       if (!dataLoaded) {
         fetchData();
       } else {
-        // Data was preloaded — still need to lazy-load tiers + rules on first open
-        if (!tiersLoaded) fetchTiers();
+        // Data was preloaded — still need to lazy-load rules on first open
         if (!rulesLoaded) fetchRules();
       }
     } else {
@@ -248,61 +245,18 @@
 
       applyUserData(data);
 
-      // Load tiers + rules
-      if (!tiersLoaded) fetchTiers();
+      // Load rules
       if (!rulesLoaded) fetchRules();
     }, function () {
       dataLoaded = false;
     });
   }
 
-  // ── Fetch tiers ────────────────────────────────────────────────────────
-  function fetchTiers() {
-    ajaxPost('reloopin_launcher_tiers', null, function (data) {
-      tiersLoaded = true;
-      tiersData = data || [];
-
-      if (!userData || tiersData.length < 2) return;
-
-      var lifetime = userData.lifetime_points || 0;
-      var currentTier = null;
-      var nextTier = null;
-
-      for (var i = 0; i < tiersData.length; i++) {
-        if (lifetime >= tiersData[i].min_points) {
-          currentTier = tiersData[i];
-          if (i + 1 < tiersData.length) nextTier = tiersData[i + 1];
-        }
-      }
-
-      if (currentTier && nextTier) {
-        var tierRow = document.getElementById('rl-tier-row');
-        var tierCurrentLabel = document.getElementById('rl-tier-current-label');
-        var tierNextLabel = document.getElementById('rl-tier-next-label');
-        var tierFill = document.getElementById('rl-tier-fill');
-        var progWrap = document.getElementById('rl-prog-wrap');
-        var progFill = document.getElementById('rl-prog-fill');
-        var progLbl = document.getElementById('rl-prog-lbl');
-
-        if (tierRow) tierRow.style.display = '';
-        if (tierCurrentLabel) tierCurrentLabel.textContent = capitalize(currentTier.tier_name);
-        if (tierNextLabel) tierNextLabel.textContent = t('at_pts', [capitalize(nextTier.tier_name), nextTier.min_points.toLocaleString()]);
-
-        var range = nextTier.min_points - currentTier.min_points;
-        var progress = lifetime - currentTier.min_points;
-        var pct = range > 0 ? Math.min(100, Math.round((progress / range) * 100)) : 0;
-        var remaining = nextTier.min_points - lifetime;
-
-        setTimeout(function () {
-          if (tierFill) tierFill.style.width = pct + '%';
-          if (progFill) progFill.style.width = pct + '%';
-        }, 300);
-
-        if (progWrap) progWrap.style.display = '';
-        if (progLbl) progLbl.textContent = t('pts_to', [remaining.toLocaleString(), capitalize(nextTier.tier_name)]);
-      }
-    }, function () { tiersLoaded = true; });
-  }
+  // TODO(next-tier UI): the tiers fetch was removed because the balance endpoint already returns the
+  // current tier (shown via #rl-tier-badge in applyUserData). The progress-to-next-tier bar
+  // (#rl-prog-wrap / #rl-tier-row) needs per-tier min_points thresholds, which the balance response
+  // does not include. Re-add the computation here once the backend exposes next_tier + points_to_next
+  // (the at_pts / pts_to i18n strings are kept for that).
 
   // ── Fetch rules ────────────────────────────────────────────────────────
   var ONE_TIME_EVENTS = ['signup', 'first_order', 'birthday'];

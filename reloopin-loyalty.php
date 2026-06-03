@@ -129,7 +129,7 @@ function reloopin_loyalty_get_settings()
         ],
         [
             'title' => __('API Key', 'reloopin-loyalty'),
-            'desc' => __('Bearer token used to authenticate with the loyalty API.', 'reloopin-loyalty'),
+            'desc' => __('Sent as the reloopin_api_key header to authenticate with the loyalty API.', 'reloopin-loyalty'),
             'id' => 'reloopin_loyalty_api_key',
             'type' => 'password',
             'default' => '',
@@ -146,13 +146,6 @@ function reloopin_loyalty_get_settings()
             'desc' => __('Sent as the merchant_code header on transaction-entry requests.', 'reloopin-loyalty'),
             'id' => 'reloopin_loyalty_merchant_code',
             'type' => 'text',
-            'default' => '',
-        ],
-        [
-            'title' => __('[TEMP] Bearer Token', 'reloopin-loyalty'),
-            'desc'  => __('<strong style="color:#b91c1c">Temporary — remove before production.</strong> Overrides the API Key as the <code>Authorization: Bearer</code> token for balance, history, rules, and tiers endpoints. Paste a short-lived JWT here for testing.', 'reloopin-loyalty'),
-            'id'    => 'reloopin_loyalty_bearer_token',
-            'type'  => 'password',
             'default' => '',
         ],
         [
