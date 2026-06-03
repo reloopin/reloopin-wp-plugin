@@ -45,6 +45,8 @@
   var currentRules     = [];     // module-level so birthday save can re-render
   var campaignsLoaded  = false;
   var campaignsData    = [];
+  var guestRulesLoaded     = false;
+  var guestCampaignsLoaded = false;
 
   // ── DOM refs ───────────────────────────────────────────────────────────
   var root = document.getElementById('rl-root');
@@ -57,7 +59,8 @@
   var panel          = document.getElementById('rl-panel');
   var panelGuest     = document.getElementById('rl-panel-guest');
   var hint           = document.getElementById('rl-hint');
-  var guestHint      = document.getElementById('rl-guest-hint');
+  var guestEarnBody  = document.getElementById('rl-guest-earn-body');
+  var guestRedeemBody = document.getElementById('rl-guest-redeem-body');
 
   // ── Init: show correct state ───────────────────────────────────────────
   if (isLoggedIn) {
@@ -111,7 +114,8 @@
     guestOpen = !guestOpen;
     if (guestOpen) {
       panelGuest.classList.add('open');
-      if (guestHint) guestHint.style.opacity = '0';
+      if (!guestRulesLoaded) fetchGuestRules();
+      if (!guestCampaignsLoaded) fetchGuestCampaigns();
     } else {
       panelGuest.classList.remove('open');
     }
@@ -119,7 +123,7 @@
 
   if (launcherGuest) launcherGuest.addEventListener('click', toggleGuestPanel);
 
-  var guestCloseBtn = document.getElementById('rl-guest-close-btn');
+  var guestCloseBtn = panelGuest ? panelGuest.querySelector('.rl-guest-hero-close') : null;
   if (guestCloseBtn) guestCloseBtn.addEventListener('click', function () {
     guestOpen = true;
     toggleGuestPanel();
@@ -634,6 +638,110 @@
       fallbackCopy(code);
       onCopied();
     }
+  }
+
+  // ── Guest panel: fetch rules & campaigns for accordions ────────────────
+
+  function fetchGuestRules() {
+    ajaxPost('reloopin_launcher_rules', null, function (rules) {
+      guestRulesLoaded = true;
+      renderGuestAccordionRows(guestEarnBody, rules || [], 'earn');
+    }, function () {
+      guestRulesLoaded = true;
+      if (guestEarnBody) {
+        guestEarnBody.innerHTML = '<div style="text-align:center;color:#9B96B0;font-size:.7rem;padding:.6rem 0">'
+          + esc(t('earn_error')) + '</div>';
+      }
+    });
+  }
+
+  function fetchGuestCampaigns() {
+    ajaxPost('reloopin_launcher_campaigns', null, function (campaigns) {
+      guestCampaignsLoaded = true;
+      renderGuestAccordionRows(guestRedeemBody, campaigns || [], 'redeem');
+    }, function () {
+      guestCampaignsLoaded = true;
+      if (guestRedeemBody) {
+        guestRedeemBody.innerHTML = '<div style="text-align:center;color:#9B96B0;font-size:.7rem;padding:.6rem 0">'
+          + esc(t('campaigns_error')) + '</div>';
+      }
+    });
+  }
+
+  function renderGuestAccordionRows(container, items, mode) {
+    if (!container) return;
+
+    if (!items || items.length === 0) {
+      var emptyMsg = mode === 'earn' ? t('no_earn_rules') : t('no_redeem_options');
+      container.innerHTML = '<div style="text-align:center;color:#9B96B0;font-size:.7rem;padding:.6rem 0">'
+        + esc(emptyMsg) + '</div>';
+      return;
+    }
+
+    var html = '';
+    items.forEach(function (item) {
+      if (mode === 'earn') {
+        if (!item.is_active) return;
+        var cfg = EVENT_TYPE_CONFIG[item.event_type] || EVENT_TYPE_CONFIG.other;
+        var strokeColor = STROKE_COLORS[cfg.color] || '#6054D0';
+        var bgColor = cfg.color === 'grn' ? '#ECFDF5'
+          : cfg.color === 'amb' ? '#FFFBEB'
+          : cfg.color === 'fuch' ? '#F5F0FF'
+          : '#EDE9FF';
+        var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star)
+          .replace(/width="14"/g, 'width="11"')
+          .replace(/height="14"/g, 'height="11"')
+          .replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
+
+        var ptsDisplay = item.rule_type === 'multiplier'
+          ? t('x_pts', [item.earn_rate])
+          : '+' + Number(item.earn_rate || 0).toLocaleString() + ' pts';
+
+        var subtitle = '';
+        if (item.rule_type === 'multiplier' || item.event_type === 'product_purchase') {
+          subtitle = t('pts_per_dollar', [item.earn_rate]);
+        } else {
+          subtitle = t('one_time_bonus');
+        }
+
+        html += '<div class="rl-accord-row">'
+          + '<div class="rl-accord-row-icon" style="background:' + bgColor + '">' + iconSvg + '</div>'
+          + '<div class="rl-accord-row-body"><div class="rl-accord-row-title">' + esc(item.name || cfg.label) + '</div>'
+          + '<div class="rl-accord-row-sub">' + esc(subtitle) + '</div></div>'
+          + '<div class="rl-accord-row-pts">' + esc(ptsDisplay) + '</div>'
+          + '</div>';
+      } else {
+        // Redeem (campaigns)
+        var discount = formatDiscount(item.discount_type, item.discount_value);
+        html += '<div class="rl-accord-row">'
+          + '<div class="rl-accord-row-icon" style="background:#F5F0FF">'
+          + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
+          + '</div>'
+          + '<div class="rl-accord-row-body"><div class="rl-accord-row-title">' + esc(item.name) + '</div>'
+          + '<div class="rl-accord-row-sub">' + esc(discount) + '</div></div>'
+          + '<div class="rl-accord-row-pts" style="color:#A855F7">' + esc(Number(item.points_cost || 0).toLocaleString()) + ' pts</div>'
+          + '</div>';
+      }
+    });
+
+    if (!html) {
+      var emptyMsg2 = mode === 'earn' ? t('no_earn_rules') : t('no_redeem_options');
+      container.innerHTML = '<div style="text-align:center;color:#9B96B0;font-size:.7rem;padding:.6rem 0">'
+        + esc(emptyMsg2) + '</div>';
+      return;
+    }
+
+    container.innerHTML = html;
+  }
+
+  // ── Guest accordion toggle ────────────────────────────────────────────
+  if (panelGuest) {
+    panelGuest.addEventListener('click', function (e) {
+      var head = e.target.closest('.rl-accord-head');
+      if (head) {
+        head.parentElement.classList.toggle('open');
+      }
+    });
   }
 
   // ── Fetch history ──────────────────────────────────────────────────────

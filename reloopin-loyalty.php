@@ -90,33 +90,109 @@ function reloopin_loyalty_init()
 }
 
 // ---------------------------------------------------------------------------
-// Settings: WooCommerce > Settings > Loyalty tab
+// Settings: "reLoopin" admin menu
 // ---------------------------------------------------------------------------
 
-add_filter('woocommerce_settings_tabs_array', 'reloopin_loyalty_add_settings_tab', 50);
-function reloopin_loyalty_add_settings_tab($tabs)
+add_action('admin_menu', 'reloopin_loyalty_admin_menu');
+function reloopin_loyalty_admin_menu()
 {
-    $tabs['reloopin_loyalty'] = __('Loyalty', 'reloopin-loyalty');
-    return $tabs;
+    add_menu_page(
+        __('reLoopin Loyalty', 'reloopin-loyalty'),
+        __('reLoopin', 'reloopin-loyalty'),
+        'manage_woocommerce',
+        'reloopin-loyalty',
+        'reloopin_loyalty_settings_page',
+        'dashicons-awards',
+        56 // After WooCommerce
+    );
 }
 
-add_action('woocommerce_settings_tabs_reloopin_loyalty', 'reloopin_loyalty_settings_tab');
-function reloopin_loyalty_settings_tab()
+add_action('admin_init', 'reloopin_loyalty_register_settings');
+function reloopin_loyalty_register_settings()
 {
-    woocommerce_admin_fields(reloopin_loyalty_get_settings());
+    $fields = reloopin_loyalty_get_settings();
+
+    foreach ($fields as $field) {
+        if (!isset($field['id']) || $field['type'] === 'title' || $field['type'] === 'sectionend') {
+            continue;
+        }
+        register_setting('reloopin_loyalty_settings', $field['id']);
+    }
 }
 
-add_action('woocommerce_update_options_reloopin_loyalty', 'reloopin_loyalty_update_settings');
-function reloopin_loyalty_update_settings()
+function reloopin_loyalty_settings_page()
 {
-    woocommerce_update_options(reloopin_loyalty_get_settings());
+    if (!current_user_can('manage_woocommerce')) {
+        return;
+    }
+
+    if (isset($_GET['settings-updated']) && $_GET['settings-updated']) { // phpcs:ignore WordPress.Security.NonceVerification
+        add_settings_error('reloopin_loyalty', 'settings_updated', __('Settings saved.', 'reloopin-loyalty'), 'updated');
+    }
+
+    settings_errors('reloopin_loyalty');
+
+    $fields = reloopin_loyalty_get_settings();
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e('reLoopin Loyalty Settings', 'reloopin-loyalty'); ?></h1>
+        <form method="post" action="options.php">
+            <?php settings_fields('reloopin_loyalty_settings'); ?>
+            <table class="form-table" role="presentation">
+            <?php foreach ($fields as $field) :
+                if ($field['type'] === 'sectionend') {
+                    continue;
+                }
+                if ($field['type'] === 'title') : ?>
+                    </table>
+                    <h2><?php echo esc_html($field['title']); ?></h2>
+                    <?php if (!empty($field['desc'])) : ?>
+                        <p><?php echo esc_html($field['desc']); ?></p>
+                    <?php endif; ?>
+                    <table class="form-table" role="presentation">
+                <?php continue;
+                endif;
+
+                $value   = get_option($field['id'], $field['default'] ?? '');
+                $field_id = esc_attr($field['id']);
+                ?>
+                <tr>
+                    <th scope="row"><label for="<?php echo $field_id; ?>"><?php echo esc_html($field['title']); ?></label></th>
+                    <td>
+                        <?php if ($field['type'] === 'text') : ?>
+                            <input type="text" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+                        <?php elseif ($field['type'] === 'password') : ?>
+                            <input type="password" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+                        <?php elseif ($field['type'] === 'checkbox') : ?>
+                            <label>
+                                <input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="yes" <?php checked($value, 'yes'); ?> />
+                                <?php echo esc_html($field['desc'] ?? ''); ?>
+                            </label>
+                        <?php elseif ($field['type'] === 'select') : ?>
+                            <select id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>">
+                                <?php foreach (($field['options'] ?? []) as $opt_val => $opt_label) : ?>
+                                    <option value="<?php echo esc_attr($opt_val); ?>" <?php selected($value, $opt_val); ?>><?php echo esc_html($opt_label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
+                        <?php if ($field['type'] !== 'checkbox' && !empty($field['desc'])) : ?>
+                            <p class="description"><?php echo esc_html($field['desc']); ?></p>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
 }
 
 function reloopin_loyalty_get_settings()
 {
     return [
         [
-            'title' => __('Loyalty System Settings', 'reloopin-loyalty'),
+            'title' => __('API Connection', 'reloopin-loyalty'),
             'type' => 'title',
             'id' => 'reloopin_loyalty_section_title',
         ],
@@ -183,6 +259,28 @@ function reloopin_loyalty_get_settings()
             'id'      => 'reloopin_launcher_branding',
             'type'    => 'checkbox',
             'default' => 'no',
+        ],
+        [
+            'title'   => __('Program name', 'reloopin-loyalty'),
+            'desc'    => __('Displayed in the guest hero banner. Defaults to the site name.', 'reloopin-loyalty'),
+            'id'      => 'reloopin_launcher_program_name',
+            'type'    => 'text',
+            'default' => '',
+        ],
+        [
+            'title'   => __('Program icon', 'reloopin-loyalty'),
+            'desc'    => __('Icon shown next to the program name in the guest hero. Choose a preset or leave as default.', 'reloopin-loyalty'),
+            'id'      => 'reloopin_launcher_program_icon',
+            'type'    => 'select',
+            'default' => 'layers',
+            'options' => [
+                'layers' => __('Layers (default)', 'reloopin-loyalty'),
+                'star'   => __('Star', 'reloopin-loyalty'),
+                'heart'  => __('Heart', 'reloopin-loyalty'),
+                'gem'    => __('Gem', 'reloopin-loyalty'),
+                'gift'   => __('Gift', 'reloopin-loyalty'),
+                'crown'  => __('Crown', 'reloopin-loyalty'),
+            ],
         ],
         [
             'type' => 'sectionend',

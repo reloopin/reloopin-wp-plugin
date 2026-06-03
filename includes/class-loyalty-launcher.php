@@ -40,6 +40,7 @@ class ReLoopin_Loyalty_Launcher
 
         // Campaigns + coupon generation (logged-in only)
         add_action('wp_ajax_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns']);
+        add_action('wp_ajax_nopriv_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns_guest']);
         add_action('wp_ajax_reloopin_generate_coupon',    [$this, 'ajax_generate_coupon']);
 
         // Earn status + birthday save (logged-in only)
@@ -302,10 +303,11 @@ class ReLoopin_Loyalty_Launcher
             'ajax_url'        => admin_url('admin-ajax.php'),
             'nonce'           => wp_create_nonce('reloopin_launcher'),
             'is_logged_in'    => is_user_logged_in(),
-            'login_url'       => wp_login_url(get_permalink()),
-            'register_url'    => wp_registration_url(),
+            'login_url'       => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink()),
+            'register_url'    => 'https://reloopin.com/',
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
+            'program_name'    => get_option('reloopin_launcher_program_name', get_bloginfo('name')),
             'preloaded_data'  => $preloaded,
             'i18n'            => [
                 /* translators: %s: customer first name */
@@ -350,6 +352,18 @@ class ReLoopin_Loyalty_Launcher
                 'discount_expires'   => __('Expires', 'reloopin-loyalty'),
                 'discount_off'       => __('off', 'reloopin-loyalty'),
                 'auto_applied'       => __('Applied automatically at checkout', 'reloopin-loyalty'),
+                // Guest panel
+                'welcome_to'         => __('Welcome to', 'reloopin-loyalty'),
+                'become_a_member'    => __('Become a member', 'reloopin-loyalty'),
+                'guest_join_sub'     => __('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'),
+                'join_now'           => __('Join now', 'reloopin-loyalty'),
+                'sign_up'            => __('Sign up', 'reloopin-loyalty'),
+                'already_have_account' => __('Already have an account?', 'reloopin-loyalty'),
+                'sign_in'            => __('Sign in', 'reloopin-loyalty'),
+                'points_title'       => __('Points', 'reloopin-loyalty'),
+                'points_section_sub' => __('Earn more Points for different actions, and turn those Points into awesome rewards!', 'reloopin-loyalty'),
+                'ways_to_redeem'     => __('Ways to redeem', 'reloopin-loyalty'),
+                'no_redeem_options'  => __('No redeem options available yet.', 'reloopin-loyalty'),
             ],
         ]);
     }
@@ -501,6 +515,39 @@ class ReLoopin_Loyalty_Launcher
 
         $payload = $this->transform_campaigns($data);
         set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
+        wp_send_json_success($payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Campaigns for guests (no login required)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_campaigns_guest(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!$this->check_rate_limit('launcher_campaigns_guest')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
+        $cache_key = $this->cache_key('camps', 'guest');
+        $cached    = get_transient($cache_key);
+
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+
+        $data = $this->api->get_campaigns(0);
+
+        if (is_wp_error($data)) {
+            wp_send_json_error([
+                'message' => $data->get_error_message(),
+                'code'    => $data->get_error_code(),
+            ]);
+        }
+
+        $payload = $this->transform_campaigns($data);
+        set_transient($cache_key, $payload, self::CACHE_TTL_LONG);
         wp_send_json_success($payload);
     }
 
@@ -678,9 +725,21 @@ class ReLoopin_Loyalty_Launcher
             return;
         }
 
-        $position = get_option('reloopin_launcher_position', 'bottom-right') === 'bottom-left' ? 'bottom-left' : 'bottom-right';
-        $branding = get_option('reloopin_launcher_branding', 'yes') === 'yes';
-        $pos_class = 'rl-position-' . $position;
+        $position      = get_option('reloopin_launcher_position', 'bottom-right') === 'bottom-left' ? 'bottom-left' : 'bottom-right';
+        $branding      = get_option('reloopin_launcher_branding', 'yes') === 'yes';
+        $program_name  = get_option('reloopin_launcher_program_name', '') ?: get_bloginfo('name');
+        $program_icon  = get_option('reloopin_launcher_program_icon', 'layers');
+        $pos_class     = 'rl-position-' . $position;
+
+        $hero_icons = [
+            'layers' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+            'star'   => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+            'heart'  => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+            'gem'    => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>',
+            'gift'   => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+            'crown'  => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20V9l4 3 4-7 4 7 4-3v11"/></svg>',
+        ];
+        $hero_icon_svg = $hero_icons[$program_icon] ?? $hero_icons['layers'];
         ?>
 
 <div id="rl-root" class="<?php echo esc_attr($pos_class); ?>">
@@ -808,59 +867,85 @@ class ReLoopin_Loyalty_Launcher
   <!-- ── GUEST STATE ── -->
   <div id="rl-guest" style="display:none">
 
-    <!-- Guest hint bubble -->
-    <div class="rl-hint-guest" id="rl-guest-hint">
-      <?php esc_html_e('Join free — earn points on every purchase', 'reloopin-loyalty'); ?>
-    </div>
-
     <!-- Guest panel -->
     <div class="rl-panel" id="rl-panel-guest">
-      <div class="rl-head-guest">
-        <div class="rl-head-top" style="margin-bottom:.7rem">
-          <div class="rl-brand">reloopin <span class="rl-gem"></span></div>
-          <button type="button" class="rl-close" id="rl-guest-close-btn" aria-label="<?php esc_attr_e('Close', 'reloopin-loyalty'); ?>">&#x2715;</button>
-        </div>
-        <div class="rl-guest-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        </div>
-        <div class="rl-guest-title"><?php esc_html_e('Earn rewards as you shop', 'reloopin-loyalty'); ?></div>
-        <div class="rl-guest-sub"><?php esc_html_e('Join our loyalty program — free forever. Earn points on every order, unlock VIP perks, and redeem for discounts.', 'reloopin-loyalty'); ?></div>
 
-        <div class="rl-guest-earn-preview">
-          <div class="rl-gep-card">
-            <div class="rl-gep-pts">+2x pts</div>
-            <div class="rl-gep-label"><?php esc_html_e('On every purchase', 'reloopin-loyalty'); ?></div>
+      <!-- Hero banner -->
+      <div class="rl-guest-hero">
+        <button type="button" class="rl-guest-hero-close" id="rl-guest-close-btn" aria-label="<?php esc_attr_e('Close', 'reloopin-loyalty'); ?>">&#x2715;</button>
+        <div class="rl-guest-hero-inner">
+          <div class="rl-guest-hero-eyebrow"><?php esc_html_e('Welcome to', 'reloopin-loyalty'); ?></div>
+          <div class="rl-guest-hero-name">
+            <?php echo $hero_icon_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG from allowed list ?>
+            <?php echo esc_html($program_name); ?>
           </div>
-          <div class="rl-gep-card">
-            <div class="rl-gep-pts" style="color:#D97706"><?php esc_html_e('Gold', 'reloopin-loyalty'); ?></div>
-            <div class="rl-gep-label"><?php esc_html_e('Tier unlocks perks', 'reloopin-loyalty'); ?></div>
-          </div>
-          <div class="rl-gep-card">
-            <div class="rl-gep-pts" style="color:#A855F7"><?php esc_html_e('$5 off', 'reloopin-loyalty'); ?></div>
-            <div class="rl-gep-label"><?php esc_html_e('After just 500 pts', 'reloopin-loyalty'); ?></div>
-          </div>
-          <div class="rl-gep-card">
-            <div class="rl-gep-pts">+250 pts</div>
-            <div class="rl-gep-label"><?php esc_html_e('For each friend referred', 'reloopin-loyalty'); ?></div>
-          </div>
-        </div>
-
-        <div class="rl-auth-btns">
-          <a href="<?php echo esc_url(wp_login_url(get_permalink())); ?>" class="rl-btn-signin"><?php esc_html_e('Sign in to your account', 'reloopin-loyalty'); ?></a>
-          <a href="<?php echo esc_url(wp_registration_url()); ?>" class="rl-btn-join">
-            <?php esc_html_e('New here? Join free —', 'reloopin-loyalty'); ?> <span><?php esc_html_e('start earning today', 'reloopin-loyalty'); ?></span>
-          </a>
         </div>
       </div>
-    </div>
 
-    <!-- Guest launcher -->
-    <button type="button" class="rl-launcher-guest" id="rl-launcher-guest">
-      <div class="rl-guest-av">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-      </div>
-      <span class="rl-launcher-guest-txt"><?php esc_html_e('Earn rewards', 'reloopin-loyalty'); ?></span>
-      <span class="rl-launcher-guest-sub">&middot; <?php esc_html_e('join free', 'reloopin-loyalty'); ?></span>
+      <!-- Scrollable body -->
+      <div class="rl-guest-body">
+
+        <!-- Join CTA -->
+        <div class="rl-guest-join-block">
+          <div class="rl-guest-join-title"><?php esc_html_e('Become a member', 'reloopin-loyalty'); ?></div>
+          <div class="rl-guest-join-sub"><?php esc_html_e('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'); ?></div>
+          <a href="<?php echo esc_url('https://reloopin.com/'); ?>" target="_blank" rel="noopener noreferrer" class="rl-btn-join-main"><?php esc_html_e('Join now', 'reloopin-loyalty'); ?></a>
+          <div class="rl-guest-signin-link"><?php esc_html_e('Already have an account?', 'reloopin-loyalty'); ?> <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>"><?php esc_html_e('Sign in', 'reloopin-loyalty'); ?></a></div>
+        </div>
+
+        <div class="rl-guest-divider"></div>
+
+        <!-- Points section -->
+        <div class="rl-guest-section">
+          <div class="rl-guest-section-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <?php esc_html_e('Points', 'reloopin-loyalty'); ?>
+          </div>
+          <div class="rl-guest-section-sub"><?php esc_html_e('Earn more Points for different actions, and turn those Points into awesome rewards!', 'reloopin-loyalty'); ?></div>
+
+          <!-- Ways to earn accordion -->
+          <div class="rl-accord-item" id="rl-guest-earn-accord">
+            <div class="rl-accord-head">
+              <div class="rl-accord-icon" style="background:#ECFDF5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              </div>
+              <span class="rl-accord-label"><?php esc_html_e('Ways to earn', 'reloopin-loyalty'); ?></span>
+              <svg class="rl-accord-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B96B0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="rl-accord-body" id="rl-guest-earn-body">
+              <div class="rl-accord-loading"><div class="rl-spinner"></div></div>
+            </div>
+          </div>
+
+          <!-- Ways to redeem accordion -->
+          <div class="rl-accord-item" id="rl-guest-redeem-accord">
+            <div class="rl-accord-head">
+              <div class="rl-accord-icon" style="background:#F5F0FF">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </div>
+              <span class="rl-accord-label"><?php esc_html_e('Ways to redeem', 'reloopin-loyalty'); ?></span>
+              <svg class="rl-accord-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B96B0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="rl-accord-body" id="rl-guest-redeem-body">
+              <div class="rl-accord-loading"><div class="rl-spinner"></div></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Footer CTA -->
+        <div class="rl-guest-footer-cta">
+          <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>" class="rl-btn-join-main"><?php esc_html_e('Sign up', 'reloopin-loyalty'); ?></a>
+          <div class="rl-guest-signin-link"><?php esc_html_e('Already have an account?', 'reloopin-loyalty'); ?> <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>"><?php esc_html_e('Sign in', 'reloopin-loyalty'); ?></a></div>
+        </div>
+
+      </div><!-- /rl-guest-body -->
+
+    </div><!-- /rl-panel-guest -->
+
+    <!-- Guest launcher — icon only -->
+    <button type="button" class="rl-launcher-icon" id="rl-launcher-guest" aria-label="<?php esc_attr_e('Earn rewards', 'reloopin-loyalty'); ?>">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
     </button>
 
   </div><!-- /rl-guest -->
