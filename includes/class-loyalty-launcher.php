@@ -3,9 +3,9 @@
  * Loyalty Launcher Widget
  *
  * Renders the floating launcher widget matching the reloopin_widget.html design.
- * Features: tabbed Earn/Redeem/History, tier progress, modals, toast notifications.
+ * Features: tabbed Earn/Redeem/History, tier badge, modals, toast notifications.
  *
- * Dynamic data (balance, history, rules, tiers) is loaded via AJAX on first open.
+ * Dynamic data (balance, history, rules) is loaded via AJAX on first open.
  * Guest users see a sign-up CTA linking to WP login/register pages.
  */
 
@@ -15,6 +15,12 @@ if (!defined('ABSPATH')) {
 
 class ReLoopin_Loyalty_Launcher
 {
+    private const CACHE_TTL_SHORT  = 5 * MINUTE_IN_SECONDS;
+    private const CACHE_TTL_LONG   = 15 * MINUTE_IN_SECONDS;
+    private const HISTORY_PAGE_SIZE = 10;
+    private const ALLOWED_ENTRY_TYPES = ['earn', 'redeem', 'bonus', 'expire', 'void', 'adjust'];
+    private const MAX_DAYS_BY_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    private const RATE_LIMIT_MAX = 30;
 
     private ReLoopin_Loyalty_API $api;
 
@@ -31,12 +37,191 @@ class ReLoopin_Loyalty_Launcher
         add_action('wp_ajax_reloopin_launcher_history', [$this, 'ajax_launcher_history']);
         add_action('wp_ajax_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
         add_action('wp_ajax_nopriv_reloopin_launcher_rules', [$this, 'ajax_launcher_rules']);
-        add_action('wp_ajax_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
-        add_action('wp_ajax_nopriv_reloopin_launcher_tiers', [$this, 'ajax_launcher_tiers']);
+
+        // Campaigns + coupon generation (logged-in only)
+        add_action('wp_ajax_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns']);
+        add_action('wp_ajax_reloopin_generate_coupon',    [$this, 'ajax_generate_coupon']);
+
+        // Earn status + birthday save (logged-in only)
+        add_action('wp_ajax_reloopin_launcher_earn_status', [$this, 'ajax_launcher_earn_status']);
+        add_action('wp_ajax_reloopin_save_birthday',        [$this, 'ajax_save_birthday']);
 
         // Cache invalidation
         add_action('woocommerce_payment_complete', [$this, 'invalidate_user_cache']);
         add_action('woocommerce_order_status_processing', [$this, 'invalidate_user_cache']);
+    }
+
+    // -----------------------------------------------------------------------
+    // Private helpers
+    // -----------------------------------------------------------------------
+
+    private function cache_key(string $prefix, string ...$parts): string
+    {
+        return 'reloopin_' . $prefix . '_' . implode('_', $parts);
+    }
+
+    private function get_user_display_info(\WP_User $user): array
+    {
+        $display_name = $user->display_name ?: $user->first_name ?: $user->user_login;
+        $first_name   = $user->first_name ?: $display_name;
+        $parts        = explode(' ', trim($display_name));
+        $initials     = strtoupper(mb_substr($parts[0], 0, 1));
+        if (count($parts) > 1) {
+            $initials .= strtoupper(mb_substr(end($parts), 0, 1));
+        }
+        return [
+            'initials'     => $initials,
+            'first_name'   => $first_name,
+            'display_name' => $display_name,
+        ];
+    }
+
+    /**
+     * Normalize API list responses — handles both direct arrays and { results: [...] }.
+     */
+    private function normalize_api_list(array $data): array
+    {
+        $list = is_array($data) && isset($data[0]) ? $data : ($data['results'] ?? $data);
+        return is_array($list) ? $list : [];
+    }
+
+    /**
+     * Generic AJAX handler: nonce → login check → rate limit → cache → fetch → transform → cache → respond.
+     *
+     * @param string        $action        Semantic action name for rate limiting (e.g. 'rules', 'tiers').
+     * @param string        $cache_key     Transient key.
+     * @param int           $ttl           Cache TTL in seconds.
+     * @param callable      $fetch         Returns array|WP_Error (raw API call).
+     * @param callable      $transform     Maps raw API result to payload shape.
+     * @param bool          $require_login Whether login is required.
+     * @param array|null    $guest_default If set, return this as success for guests instead of error.
+     */
+    private function ajax_cached(
+        string   $action,
+        string   $cache_key,
+        int      $ttl,
+        callable $fetch,
+        callable $transform,
+        bool     $require_login = false,
+        ?array   $guest_default = null
+    ): void {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if ($require_login && !is_user_logged_in()) {
+            if ($guest_default !== null) {
+                wp_send_json_success($guest_default);
+            }
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        if (!$this->check_rate_limit($action)) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+
+        $result = $fetch();
+        if (is_wp_error($result)) {
+            wp_send_json_error([
+                'message' => $result->get_error_message(),
+                'code'    => $result->get_error_code(),
+            ]);
+        }
+
+        $payload = $transform($result);
+        set_transient($cache_key, $payload, $ttl);
+        wp_send_json_success($payload);
+    }
+
+    private function check_rate_limit(string $action): bool
+    {
+        $user_key = is_user_logged_in()
+            ? (string) get_current_user_id()
+            : sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'] ?? ''));
+        $key   = 'reloopin_rl_' . md5($action . $user_key);
+        $count = (int) get_transient($key);
+        if ($count >= self::RATE_LIMIT_MAX) {
+            return false;
+        }
+        set_transient($key, $count + 1, MINUTE_IN_SECONDS);
+        return true;
+    }
+
+    private function set_reloopin_meta(\WC_Coupon $coupon, array $api_data, string $code): void
+    {
+        $coupon->update_meta_data('_reloopin_coupon', '1');
+        $coupon->update_meta_data('_reloopin_campaign_id', (int) ($api_data['campaign_id'] ?? 0));
+        $coupon->update_meta_data('_reloopin_original_code', $code);
+    }
+
+    // -----------------------------------------------------------------------
+    // Transform helpers
+    // -----------------------------------------------------------------------
+
+    private function transform_balance(array $data, \WP_User $user): array
+    {
+        $info = $this->get_user_display_info($user);
+        return [
+            'logged_in'        => true,
+            'name'             => $info['first_name'],
+            'initials'         => $info['initials'],
+            'available_points' => (int) ($data['available_points'] ?? 0),
+            'lifetime_points'  => (int) ($data['lifetime_points'] ?? 0),
+            'redeemed_points'  => (int) ($data['redeemed_points'] ?? 0),
+            'expired_points'   => (int) ($data['expired_points'] ?? 0),
+            'tier'             => $data['tier'] ?? '',
+            'referral_url'     => add_query_arg('ref', get_current_user_id(), home_url('/')),
+        ];
+    }
+
+    private function transform_rules(array $data): array
+    {
+        return array_map(fn(array $rule): array => [
+            'id'         => (int) ($rule['id'] ?? 0),
+            'name'       => $rule['name'] ?? '',
+            'rule_type'  => $rule['rule_type'] ?? '',
+            'event_type' => $rule['event_type'] ?? '',
+            'earn_rate'  => (float) ($rule['earn_rate'] ?? 0),
+            'is_active'  => (bool) ($rule['is_active'] ?? false),
+            'conditions' => $rule['conditions'] ?? null,
+        ], $this->normalize_api_list($data));
+    }
+
+    private function transform_history(array $data, int $page): array
+    {
+        $results = array_map(function (array $entry): array {
+            $date_raw = $entry['created_at'] ?? $entry['timestamp'] ?? '';
+            return [
+                'date'          => $date_raw ? date_i18n(get_option('date_format'), strtotime($date_raw)) : '',
+                'date_raw'      => $date_raw,
+                'entry_type'    => $entry['entry_type'] ?? $entry['type'] ?? '',
+                'points'        => (int) ($entry['points'] ?? 0),
+                'balance_after' => (int) ($entry['balance_after'] ?? 0),
+                'notes'         => $entry['notes'] ?? $entry['note'] ?? '',
+            ];
+        }, $data['results'] ?? []);
+
+        return [
+            'results'   => $results,
+            'total'     => (int) ($data['total'] ?? 0),
+            'page_size' => (int) ($data['page_size'] ?? self::HISTORY_PAGE_SIZE),
+            'page'      => $page,
+        ];
+    }
+
+    private function transform_campaigns(array $data): array
+    {
+        return array_map(fn(array $c): array => [
+            'id'             => (int)    ($c['id']             ?? 0),
+            'name'           => (string) ($c['name']           ?? ''),
+            'campaign_type'  => (string) ($c['campaign_type']  ?? ''),
+            'points_cost'    => (int)    ($c['points_cost']    ?? 0),
+            'discount_type'  => (string) ($c['discount_type']  ?? ''),
+            'discount_value' => (string) ($c['discount_value'] ?? '0'),
+        ], $this->normalize_api_list($data));
     }
 
     // -----------------------------------------------------------------------
@@ -50,10 +235,20 @@ class ReLoopin_Loyalty_Launcher
             return;
         }
         $user_id = (int) $order->get_customer_id();
-        if ($user_id > 0) {
-            delete_transient('reloopin_bal_' . $user_id);
-            delete_transient('reloopin_hist_' . $user_id . '_1');
+        if ($user_id <= 0) {
+            return;
         }
+
+        $uid = (string) $user_id;
+        delete_transient($this->cache_key('bal', $uid));
+        delete_transient($this->cache_key('earn_status', $uid));
+        delete_transient($this->cache_key('camps', $uid));
+
+        // Bump generation counter so all history cache keys become stale.
+        // Old transients expire naturally via TTL (5 min).
+        $gen_key = 'reloopin_hist_gen_' . $user_id;
+        $current = (int) get_option($gen_key, 0);
+        update_option($gen_key, $current + 1, false);
     }
 
     // -----------------------------------------------------------------------
@@ -68,7 +263,6 @@ class ReLoopin_Loyalty_Launcher
 
         $base = RELOOPIN_LOYALTY_PLUGIN_URL;
 
-        // Google Fonts — encode commas per WP docs to prevent URL stripping
         $font_url = str_replace(',', '%2C', 'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
         wp_enqueue_style('reloopin-google-fonts', $font_url, [], RELOOPIN_LOYALTY_VERSION);
 
@@ -87,16 +281,20 @@ class ReLoopin_Loyalty_Launcher
             true
         );
 
-        // Build user initials for logged-in users
-        $initials = '';
+        $initials   = '';
         $first_name = '';
+        $preloaded  = null;
+
         if (is_user_logged_in()) {
             $user = wp_get_current_user();
-            $first_name = $user->first_name ?: $user->display_name;
-            $parts = explode(' ', trim($user->display_name ?: $user->user_login));
-            $initials = strtoupper(mb_substr($parts[0], 0, 1));
-            if (count($parts) > 1) {
-                $initials .= strtoupper(mb_substr(end($parts), 0, 1));
+            $info = $this->get_user_display_info($user);
+            $initials   = $info['initials'];
+            $first_name = $info['first_name'];
+
+            // Preload balance from transient (zero API calls — cached data only).
+            $cached = get_transient($this->cache_key('bal', (string) $user->ID));
+            if ($cached !== false) {
+                $preloaded = $cached;
             }
         }
 
@@ -108,6 +306,7 @@ class ReLoopin_Loyalty_Launcher
             'register_url'    => wp_registration_url(),
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
+            'preloaded_data'  => $preloaded,
             'i18n'            => [
                 /* translators: %s: customer first name */
                 'welcome_back'       => __('Welcome back, %s!', 'reloopin-loyalty'),
@@ -134,6 +333,23 @@ class ReLoopin_Loyalty_Launcher
                 'earn_error'         => __('Could not load earn rules.', 'reloopin-loyalty'),
                 'redeem_error'       => __('Could not load redeem options.', 'reloopin-loyalty'),
                 'no_earn_rules'      => __('No earn rules available.', 'reloopin-loyalty'),
+                'already_earned'     => __('Already earned', 'reloopin-loyalty'),
+                'ready_to_earn'      => __('Ready to earn', 'reloopin-loyalty'),
+                'collected'          => __('Collected', 'reloopin-loyalty'),
+                'annual_bonus'       => __('Annual bonus active', 'reloopin-loyalty'),
+                'campaigns_error'    => __('Could not load rewards.', 'reloopin-loyalty'),
+                'no_campaigns'       => __('No rewards available yet. Keep earning points!', 'reloopin-loyalty'),
+                'generating'         => __('Generating…', 'reloopin-loyalty'),
+                'coupon_generated'   => __('Coupon generated!', 'reloopin-loyalty'),
+                /* translators: %s: coupon code */
+                'coupon_copied'      => __('Coupon %s copied!', 'reloopin-loyalty'),
+                'coupon_error'       => __('Could not generate coupon. Please try again.', 'reloopin-loyalty'),
+                'pts_required'       => __('pts required', 'reloopin-loyalty'),
+                'copy_code'          => __('Copy', 'reloopin-loyalty'),
+                'copied'             => __('Copied!', 'reloopin-loyalty'),
+                'discount_expires'   => __('Expires', 'reloopin-loyalty'),
+                'discount_off'       => __('off', 'reloopin-loyalty'),
+                'auto_applied'       => __('Applied automatically at checkout', 'reloopin-loyalty'),
             ],
         ]);
     }
@@ -150,8 +366,12 @@ class ReLoopin_Loyalty_Launcher
             wp_send_json_success(['logged_in' => false]);
         }
 
+        if (!$this->check_rate_limit('launcher_data')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
         $user_id   = get_current_user_id();
-        $cache_key = 'reloopin_bal_' . $user_id;
+        $cache_key = $this->cache_key('bal', (string) $user_id);
         $cached    = get_transient($cache_key);
 
         if ($cached !== false) {
@@ -162,29 +382,14 @@ class ReLoopin_Loyalty_Launcher
         $balance_data = $this->api->get_balance($user->user_email);
 
         if (is_wp_error($balance_data)) {
-            wp_send_json_error(['message' => __('Could not fetch points balance.', 'reloopin-loyalty')]);
+            wp_send_json_error([
+                'message' => __('Could not fetch points balance.', 'reloopin-loyalty'),
+                'code'    => $balance_data->get_error_code(),
+            ]);
         }
 
-        $display_name = $user->display_name ?: $user->first_name ?: $user->user_login;
-        $parts = explode(' ', trim($display_name));
-        $initials = strtoupper(mb_substr($parts[0], 0, 1));
-        if (count($parts) > 1) {
-            $initials .= strtoupper(mb_substr(end($parts), 0, 1));
-        }
-
-        $payload = [
-            'logged_in'        => true,
-            'name'             => $user->first_name ?: $display_name,
-            'initials'         => $initials,
-            'available_points' => (int) ($balance_data['available_points'] ?? 0),
-            'lifetime_points'  => (int) ($balance_data['lifetime_points'] ?? 0),
-            'redeemed_points'  => (int) ($balance_data['redeemed_points'] ?? 0),
-            'expired_points'   => (int) ($balance_data['expired_points'] ?? 0),
-            'tier'             => $balance_data['tier'] ?? '',
-            'referral_url'     => add_query_arg('ref', $user_id, home_url('/')),
-        ];
-
-        set_transient($cache_key, $payload, 5 * MINUTE_IN_SECONDS);
+        $payload = $this->transform_balance($balance_data, $user);
+        set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
         wp_send_json_success($payload);
     }
 
@@ -200,44 +405,38 @@ class ReLoopin_Loyalty_Launcher
             wp_send_json_error(['message' => 'not_logged_in']);
         }
 
+        if (!$this->check_rate_limit('launcher_history')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
         $user_id    = get_current_user_id();
         $page       = max(1, absint(wp_unslash($_POST['page'] ?? 1)));
         $entry_type = isset($_POST['entry_type']) ? sanitize_text_field(wp_unslash($_POST['entry_type'])) : null;
-        $cache_key  = 'reloopin_hist_' . $user_id . '_' . $page . '_' . ($entry_type ?: 'all');
-        $cached     = get_transient($cache_key);
+
+        if ($entry_type !== null && $entry_type !== '' && !in_array($entry_type, self::ALLOWED_ENTRY_TYPES, true)) {
+            $entry_type = null;
+        }
+
+        $gen       = (int) get_option('reloopin_hist_gen_' . $user_id, 0);
+        $cache_key = $this->cache_key('hist', (string) $user_id, (string) $page, $entry_type ?: 'all', (string) $gen);
+        $cached    = get_transient($cache_key);
 
         if ($cached !== false) {
             wp_send_json_success($cached);
         }
 
         $user         = wp_get_current_user();
-        $history_data = $this->api->get_history($user->user_email, $page, 10, $entry_type ?: null);
+        $history_data = $this->api->get_history($user->user_email, $page, self::HISTORY_PAGE_SIZE, $entry_type ?: null);
 
         if (is_wp_error($history_data)) {
-            wp_send_json_error(['message' => $history_data->get_error_message()]);
+            wp_send_json_error([
+                'message' => $history_data->get_error_message(),
+                'code'    => $history_data->get_error_code(),
+            ]);
         }
 
-        $results = array_map(function (array $entry): array {
-            $delta    = (int) ($entry['points'] ?? 0);
-            $date_raw = $entry['created_at'] ?? $entry['timestamp'] ?? '';
-            return [
-                'date'          => $date_raw ? date_i18n(get_option('date_format'), strtotime($date_raw)) : '',
-                'date_raw'      => $date_raw,
-                'entry_type'    => $entry['entry_type'] ?? $entry['type'] ?? '',
-                'points'        => $delta,
-                'balance_after' => (int) ($entry['balance_after'] ?? 0),
-                'notes'         => $entry['notes'] ?? $entry['note'] ?? '',
-            ];
-        }, $history_data['results'] ?? []);
-
-        $payload = [
-            'results'   => $results,
-            'total'     => (int) ($history_data['total'] ?? 0),
-            'page_size' => (int) ($history_data['page_size'] ?? 10),
-            'page'      => $page,
-        ];
-
-        set_transient($cache_key, $payload, 5 * MINUTE_IN_SECONDS);
+        $payload = $this->transform_history($history_data, $page);
+        set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
         wp_send_json_success($payload);
     }
 
@@ -247,79 +446,226 @@ class ReLoopin_Loyalty_Launcher
 
     public function ajax_launcher_rules(): void
     {
+        $merchant_id = get_option('reloopin_loyalty_merchant_id', '');
+        $this->ajax_cached(
+            'rules',
+            $this->cache_key('rules', $merchant_id),
+            self::CACHE_TTL_LONG,
+            fn() => $this->api->get_rules(),
+            fn(array $data) => $this->transform_rules($data),
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Campaigns (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_campaigns(): void
+    {
         check_ajax_referer('reloopin_launcher', 'nonce');
 
-        $cache_key = 'reloopin_rules_' . get_option('reloopin_loyalty_merchant_id', '');
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        if (!$this->check_rate_limit('launcher_campaigns')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
+        $user_id   = get_current_user_id();
+        $cache_key = $this->cache_key('camps', (string) $user_id);
         $cached    = get_transient($cache_key);
 
         if ($cached !== false) {
             wp_send_json_success($cached);
         }
 
-        $rules_data = $this->api->get_rules();
-
-        if (is_wp_error($rules_data)) {
-            wp_send_json_error(['message' => $rules_data->get_error_message()]);
+        // Fetch available_points — from transient if warm, else from API.
+        $bal_cached = get_transient($this->cache_key('bal', (string) $user_id));
+        if ($bal_cached !== false) {
+            $available_points = (int) ($bal_cached['available_points'] ?? 0);
+        } else {
+            $user         = wp_get_current_user();
+            $balance_data = $this->api->get_balance($user->user_email);
+            $available_points = is_wp_error($balance_data) ? 0 : (int) ($balance_data['available_points'] ?? 0);
         }
 
-        // Normalize: the API may return the array directly or nested
-        $rules = is_array($rules_data) && isset($rules_data[0]) ? $rules_data : ($rules_data['results'] ?? $rules_data);
+        $data = $this->api->get_campaigns($available_points);
 
-        $payload = array_map(function (array $rule): array {
-            return [
-                'id'         => (int) ($rule['id'] ?? 0),
-                'name'       => $rule['name'] ?? '',
-                'rule_type'  => $rule['rule_type'] ?? '',
-                'event_type' => $rule['event_type'] ?? '',
-                'earn_rate'  => (float) ($rule['earn_rate'] ?? 0),
-                'is_active'  => (bool) ($rule['is_active'] ?? false),
-                'conditions' => $rule['conditions'] ?? null,
-            ];
-        }, is_array($rules) ? $rules : []);
+        if (is_wp_error($data)) {
+            wp_send_json_error([
+                'message' => $data->get_error_message(),
+                'code'    => $data->get_error_code(),
+            ]);
+        }
 
-        set_transient($cache_key, $payload, 15 * MINUTE_IN_SECONDS);
+        $payload = $this->transform_campaigns($data);
+        set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
         wp_send_json_success($payload);
     }
 
     // -----------------------------------------------------------------------
-    // AJAX: Tiers
+    // AJAX: Generate coupon (logged-in only)
     // -----------------------------------------------------------------------
 
-    public function ajax_launcher_tiers(): void
+    public function ajax_generate_coupon(): void
     {
         check_ajax_referer('reloopin_launcher', 'nonce');
 
-        $cache_key = 'reloopin_tiers_' . get_option('reloopin_loyalty_merchant_id', '');
-        $cached    = get_transient($cache_key);
-
-        if ($cached !== false) {
-            wp_send_json_success($cached);
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
         }
 
-        $tiers_data = $this->api->get_tiers();
-
-        if (is_wp_error($tiers_data)) {
-            wp_send_json_error(['message' => $tiers_data->get_error_message()]);
+        $campaign_id = absint(wp_unslash($_POST['campaign_id'] ?? 0));
+        if ($campaign_id <= 0) {
+            wp_send_json_error(['message' => 'invalid_campaign']);
         }
 
-        $tiers = is_array($tiers_data) && isset($tiers_data[0]) ? $tiers_data : ($tiers_data['results'] ?? $tiers_data);
+        $user         = wp_get_current_user();
+        $customer_ref = $user->user_email;
 
-        $payload = array_map(function (array $tier): array {
-            return [
-                'tier_name'  => $tier['tier_name'] ?? '',
-                'min_points' => (int) ($tier['min_points'] ?? 0),
-                'max_points' => isset($tier['max_points']) ? (int) $tier['max_points'] : null,
-                'multiplier' => (float) ($tier['multiplier'] ?? 1),
-                'benefits'   => $tier['benefits'] ?? null,
-                'is_active'  => (bool) ($tier['is_active'] ?? false),
-            ];
-        }, is_array($tiers) ? $tiers : []);
+        $result = $this->api->generate_coupon($campaign_id, $customer_ref);
 
-        // Sort by min_points ascending
-        usort($payload, fn($a, $b) => $a['min_points'] <=> $b['min_points']);
+        if (is_wp_error($result)) {
+            wp_send_json_error([
+                'message' => $result->get_error_message(),
+                'code'    => $result->get_error_code(),
+            ]);
+        }
 
-        set_transient($cache_key, $payload, 15 * MINUTE_IN_SECONDS);
-        wp_send_json_success($payload);
+        $code = sanitize_text_field($result['code'] ?? '');
+        if (empty($code)) {
+            wp_send_json_error(['message' => 'no_code']);
+        }
+
+        $this->apply_wc_coupon($code, $result, $customer_ref);
+
+        // Invalidate campaigns + balance cache — points deducted after generation.
+        $uid = (string) get_current_user_id();
+        delete_transient($this->cache_key('camps', $uid));
+        delete_transient($this->cache_key('bal', $uid));
+
+        wp_send_json_success([
+            'code'           => $code,
+            'discount_type'  => $result['discount_type']  ?? '',
+            'discount_value' => $result['discount_value'] ?? '',
+            'expires_at'     => $result['expires_at']     ?? '',
+        ]);
+    }
+
+    /**
+     * Create a WooCommerce coupon post for a generated reLoopin coupon code.
+     */
+    private function apply_wc_coupon(string $code, array $api_data, string $customer_ref): void
+    {
+        if (!function_exists('wc_get_coupon_id_by_code')) {
+            reloopin_loyalty_debug('apply_wc_coupon → wc_get_coupon_id_by_code not available');
+            return;
+        }
+
+        $existing = wc_get_coupon_id_by_code($code);
+        if ($existing > 0) {
+            $coupon = new WC_Coupon($existing);
+            if ($coupon->get_meta('_reloopin_coupon') !== '1') {
+                $this->set_reloopin_meta($coupon, $api_data, $code);
+                $coupon->save();
+            }
+            return;
+        }
+
+        $wc_type = in_array($api_data['discount_type'] ?? '', ['percentage', 'percent'], true)
+            ? 'percent'
+            : 'fixed_cart';
+
+        $coupon = new WC_Coupon();
+        $coupon->set_code($code);
+        $coupon->set_discount_type($wc_type);
+        $coupon->set_amount((float) ($api_data['discount_value'] ?? 0));
+        $coupon->set_usage_limit(1);
+        $coupon->set_usage_limit_per_user(1);
+        $coupon->set_email_restrictions([$customer_ref]);
+
+        if (!empty($api_data['expires_at'])) {
+            $expires = strtotime($api_data['expires_at']);
+            if ($expires > 0) {
+                $coupon->set_date_expires($expires);
+            }
+        }
+
+        // Set meta before first save — WC persists pending meta on save().
+        $this->set_reloopin_meta($coupon, $api_data, $code);
+        $coupon_id = $coupon->save();
+
+        reloopin_loyalty_debug('apply_wc_coupon → created', [
+            'coupon_id' => $coupon_id,
+            'code'      => $code,
+        ]);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Earn status (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_earn_status(): void
+    {
+        $guest_default = ['completed' => [], 'birthday_set' => false];
+
+        $this->ajax_cached(
+            'earn_status',
+            is_user_logged_in()
+                ? $this->cache_key('earn_status', (string) get_current_user_id())
+                : 'reloopin_earn_status_guest',
+            self::CACHE_TTL_SHORT,
+            function (): array {
+                $user_id   = get_current_user_id();
+                $completed = ['signup'];
+
+                if (function_exists('wc_get_customer_order_count') && wc_get_customer_order_count($user_id) >= 1) {
+                    $completed[] = 'first_order';
+                }
+
+                $birthday     = get_user_meta($user_id, '_reloopin_birthday', true);
+                $birthday_set = !empty($birthday);
+                if ($birthday_set) {
+                    $completed[] = 'birthday';
+                }
+
+                return [
+                    'completed'    => $completed,
+                    'birthday_set' => $birthday_set,
+                ];
+            },
+            fn(array $data) => $data,
+            true,
+            $guest_default,
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Save birthday
+    // -----------------------------------------------------------------------
+
+    public function ajax_save_birthday(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        $month = isset($_POST['month']) ? (int) $_POST['month'] : 0;
+        $day   = isset($_POST['day'])   ? (int) $_POST['day']   : 0;
+
+        if ($month < 1 || $month > 12 || $day < 1 || $day > self::MAX_DAYS_BY_MONTH[$month]) {
+            wp_send_json_error(['message' => 'invalid_date']);
+        }
+
+        $user_id  = get_current_user_id();
+        $birthday = sprintf('0000-%02d-%02d', $month, $day);
+        update_user_meta($user_id, '_reloopin_birthday', $birthday);
+        delete_transient($this->cache_key('earn_status', (string) $user_id));
+
+        wp_send_json_success();
     }
 
     // -----------------------------------------------------------------------
@@ -373,6 +719,10 @@ class ReLoopin_Loyalty_Launcher
               <svg width="9" height="9" viewBox="0 0 24 24" fill="#D97706" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               <span id="rl-tier-name"></span>
             </div>
+            <?php // TODO(next-tier UI): the balance endpoint only returns the current tier name (rendered in #rl-tier-badge above). ?>
+            <?php // The progress-to-next-tier bar below needs per-tier min_points thresholds, which the tiers endpoint used to ?>
+            <?php // provide. Re-wire #rl-prog-wrap / #rl-tier-row (and the at_pts / pts_to i18n strings) once that data is ?>
+            <?php // exposed (e.g. next_tier + points_to_next on the balance response). Kept hidden until then. ?>
             <div class="rl-prog-wrap" id="rl-prog-wrap" style="display:none">
               <div class="rl-prog-track"><div class="rl-prog-fill" id="rl-prog-fill"></div></div>
               <div class="rl-prog-lbl" id="rl-prog-lbl"></div>
@@ -381,6 +731,7 @@ class ReLoopin_Loyalty_Launcher
         </div>
       </div>
 
+      <?php // TODO(next-tier UI): hidden until per-tier min_points thresholds are available again — see note above. ?>
       <div class="rl-tier-row" id="rl-tier-row" style="display:none">
         <div class="rl-tier-labels">
           <span id="rl-tier-current-label"></span>
