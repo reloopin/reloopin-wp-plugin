@@ -303,16 +303,12 @@ class ReLoopin_Loyalty_Launcher
             'ajax_url'        => admin_url('admin-ajax.php'),
             'nonce'           => wp_create_nonce('reloopin_launcher'),
             'is_logged_in'    => is_user_logged_in(),
-            'login_url'       => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink()),
-            'register_url'    => 'https://reloopin.com/',
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
-            'program_name'    => get_option('reloopin_launcher_program_name', get_bloginfo('name')),
             'preloaded_data'  => $preloaded,
             'i18n'            => [
                 /* translators: %s: customer first name */
                 'welcome_back'       => __('Welcome back, %s!', 'reloopin-loyalty'),
-                'ways_to_earn'       => __('Ways to earn', 'reloopin-loyalty'),
                 /* translators: %s: points amount */
                 'pts_per_dollar'     => __('%s pts per $1', 'reloopin-loyalty'),
                 'one_time_bonus'     => __('One-time bonus', 'reloopin-loyalty'),
@@ -323,17 +319,10 @@ class ReLoopin_Loyalty_Launcher
                 'available'          => __('Available', 'reloopin-loyalty'),
                 /* translators: %s: points balance */
                 'redeem_your_points' => __('Redeem your points — %s pts', 'reloopin-loyalty'),
-                'redeem_placeholder' => __('Redeem options will appear here. Use the "Apply at checkout" button below to redeem points on your next order.', 'reloopin-loyalty'),
-                /* translators: 1: points required, 2: next tier name */
-                'pts_to'             => __('%1$s pts to %2$s', 'reloopin-loyalty'),
-                /* translators: 1: reward label, 2: points cost */
-                'at_pts'             => __('%1$s at %2$s pts', 'reloopin-loyalty'),
                 'unknown'            => __('Unknown', 'reloopin-loyalty'),
                 'bday_saved'         => __('Birthday saved! You\'ll earn bonus points every year.', 'reloopin-loyalty'),
                 'referral_copied'    => __('Referral link copied to clipboard!', 'reloopin-loyalty'),
-                'apply_prompt'       => __('Choose a reward to apply at checkout.', 'reloopin-loyalty'),
                 'earn_error'         => __('Could not load earn rules.', 'reloopin-loyalty'),
-                'redeem_error'       => __('Could not load redeem options.', 'reloopin-loyalty'),
                 'no_earn_rules'      => __('No earn rules available.', 'reloopin-loyalty'),
                 'already_earned'     => __('Already earned', 'reloopin-loyalty'),
                 'ready_to_earn'      => __('Ready to earn', 'reloopin-loyalty'),
@@ -352,17 +341,6 @@ class ReLoopin_Loyalty_Launcher
                 'discount_expires'   => __('Expires', 'reloopin-loyalty'),
                 'discount_off'       => __('off', 'reloopin-loyalty'),
                 'auto_applied'       => __('Applied automatically at checkout', 'reloopin-loyalty'),
-                // Guest panel
-                'welcome_to'         => __('Welcome to', 'reloopin-loyalty'),
-                'become_a_member'    => __('Become a member', 'reloopin-loyalty'),
-                'guest_join_sub'     => __('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'),
-                'join_now'           => __('Join now', 'reloopin-loyalty'),
-                'sign_up'            => __('Sign up', 'reloopin-loyalty'),
-                'already_have_account' => __('Already have an account?', 'reloopin-loyalty'),
-                'sign_in'            => __('Sign in', 'reloopin-loyalty'),
-                'points_title'       => __('Points', 'reloopin-loyalty'),
-                'points_section_sub' => __('Earn more Points for different actions, and turn those Points into awesome rewards!', 'reloopin-loyalty'),
-                'ways_to_redeem'     => __('Ways to redeem', 'reloopin-loyalty'),
                 'no_redeem_options'  => __('No redeem options available yet.', 'reloopin-loyalty'),
             ],
         ]);
@@ -889,7 +867,7 @@ class ReLoopin_Loyalty_Launcher
         <div class="rl-guest-join-block">
           <div class="rl-guest-join-title"><?php esc_html_e('Become a member', 'reloopin-loyalty'); ?></div>
           <div class="rl-guest-join-sub"><?php esc_html_e('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'); ?></div>
-          <a href="<?php echo esc_url('https://reloopin.com/'); ?>" target="_blank" rel="noopener noreferrer" class="rl-btn-join-main"><?php esc_html_e('Join now', 'reloopin-loyalty'); ?></a>
+          <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>" class="rl-btn-join-main"><?php esc_html_e('Join now', 'reloopin-loyalty'); ?></a>
           <div class="rl-guest-signin-link"><?php esc_html_e('Already have an account?', 'reloopin-loyalty'); ?> <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>"><?php esc_html_e('Sign in', 'reloopin-loyalty'); ?></a></div>
         </div>
 
