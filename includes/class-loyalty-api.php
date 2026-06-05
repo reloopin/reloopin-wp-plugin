@@ -113,8 +113,9 @@ class ReLoopin_Loyalty_API
      */
     public function get_history(string $customer_ref, int $page = 1, int $page_size = 10, ?string $entry_type = null): array|WP_Error
     {
+        $endpoint = '/api/v1/external/merchant/' . urlencode($this->merchant_id) . '/points/history';
+
         $params = [
-            'merchant_id' => $this->merchant_id,
             'customer_ref' => $customer_ref,
             'page' => $page,
             'page_size' => $page_size,
@@ -126,7 +127,7 @@ class ReLoopin_Loyalty_API
 
         reloopin_loyalty_debug('get_history → request', $params);
 
-        return $this->get('/api/v1/external/merchant/points/history', $params);
+        return $this->get($endpoint, $params);
     }
 
     /**
