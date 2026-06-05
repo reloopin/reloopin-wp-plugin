@@ -1,13 +1,7 @@
 <?php
 /**
  * Loyalty API Client
- *
  * Wraps every call to the reLoopin loyalty backend REST API.
- *
- * Endpoints used:
- *   POST /api/v1/merchant/transaction-entry   — post a transaction (auto-awards points)
- *   GET  /api/v1/merchant/points/customer/balance      — get customer balance + tier
- *   GET  /api/v1/external/merchant/points/history      — get paginated ledger
  */
 
 if (!defined('ABSPATH')) {
@@ -88,7 +82,9 @@ class ReLoopin_Loyalty_API
 
         reloopin_loyalty_debug('create_platform_customer → request body', $body);
 
-        return $this->post('/api/v1/merchant/platform/customer', $body, $this->platform_headers());
+        $endpoint = '/api/v1/external/merchant/' . urlencode($this->merchant_id) . '/customer';
+
+        return $this->post($endpoint, $body, $this->platform_headers());
     }
 
     /**
