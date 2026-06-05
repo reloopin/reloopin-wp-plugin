@@ -339,7 +339,6 @@
       if (badge) {
         var completed = (earnStatus && earnStatus.completed) || [];
         var readyCount = currentRules.filter(function (r) {
-          if (!r.is_active) return false;
           var isOneTime = ONE_TIME_EVENTS.indexOf(r.event_type) !== -1;
           return !(isOneTime && completed.indexOf(r.event_type) !== -1);
         }).length;
@@ -375,7 +374,7 @@
     var alreadyDone = [];
     var readyToEarn = [];
 
-    rules.filter(function (r) { return r.is_active; }).forEach(function (rule) {
+    rules.forEach(function (rule) {
       var isOneTime = ONE_TIME_EVENTS.indexOf(rule.event_type) !== -1;
       if (isOneTime && completed.indexOf(rule.event_type) !== -1) {
         alreadyDone.push(rule);
@@ -394,8 +393,8 @@
         var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="#A8A29E"');
 
         var ptsDisplay = rule.rule_type === 'multiplier'
-          ? t('x_pts', [rule.earn_rate])
-          : '+' + Number(rule.earn_rate || 0).toLocaleString() + ' pts';
+          ? t('x_pts', [rule.points_reduced])
+          : '+' + Number(rule.points_reduced || 0).toLocaleString() + ' pts';
 
         var subtitle = rule.event_type === 'birthday'
           ? t('annual_bonus')
@@ -428,7 +427,7 @@
 
         var subtitle = '';
         if (rule.rule_type === 'multiplier' || rule.event_type === 'product_purchase') {
-          subtitle = t('pts_per_dollar', [rule.earn_rate]);
+          subtitle = t('pts_per_dollar', [rule.points_reduced]);
         } else if (rule.rule_type === 'flat') {
           subtitle = t('one_time_bonus');
         } else {
@@ -436,8 +435,8 @@
         }
 
         var ptsDisplay = rule.rule_type === 'multiplier'
-          ? t('x_pts', [rule.earn_rate])
-          : '+' + Number(rule.earn_rate || 0).toLocaleString() + ' pts';
+          ? t('x_pts', [rule.points_reduced])
+          : '+' + Number(rule.points_reduced || 0).toLocaleString() + ' pts';
 
         var pillLabel = rule.event_type === 'birthday' ? esc(t('add_now'))
           : rule.event_type === 'referral' ? esc(t('get_link'))
@@ -681,7 +680,6 @@
     var html = '';
     items.forEach(function (item) {
       if (mode === 'earn') {
-        if (!item.is_active) return;
         var cfg = EVENT_TYPE_CONFIG[item.event_type] || EVENT_TYPE_CONFIG.other;
         var strokeColor = STROKE_COLORS[cfg.color] || '#6054D0';
         var bgColor = cfg.color === 'grn' ? '#ECFDF5'
@@ -694,12 +692,12 @@
           .replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
 
         var ptsDisplay = item.rule_type === 'multiplier'
-          ? t('x_pts', [item.earn_rate])
-          : '+' + Number(item.earn_rate || 0).toLocaleString() + ' pts';
+          ? t('x_pts', [item.points_reduced])
+          : '+' + Number(item.points_reduced || 0).toLocaleString() + ' pts';
 
         var subtitle = '';
         if (item.rule_type === 'multiplier' || item.event_type === 'product_purchase') {
-          subtitle = t('pts_per_dollar', [item.earn_rate]);
+          subtitle = t('pts_per_dollar', [item.points_reduced]);
         } else {
           subtitle = t('one_time_bonus');
         }

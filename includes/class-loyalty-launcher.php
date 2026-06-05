@@ -181,13 +181,12 @@ class ReLoopin_Loyalty_Launcher
     private function transform_rules(array $data): array
     {
         return array_map(fn(array $rule): array => [
-            'id'         => (int) ($rule['id'] ?? 0),
-            'name'       => $rule['name'] ?? '',
-            'rule_type'  => $rule['rule_type'] ?? '',
-            'event_type' => $rule['event_type'] ?? '',
-            'earn_rate'  => (float) ($rule['earn_rate'] ?? 0),
-            'is_active'  => (bool) ($rule['is_active'] ?? false),
-            'conditions' => $rule['conditions'] ?? null,
+            'id'             => (int) ($rule['id'] ?? 0),
+            'name'           => $rule['name'] ?? '',
+            'rule_type'      => $rule['rule_type'] ?? '',
+            'event_type'     => $rule['event_type'] ?? '',
+            'points_reduced' => (int) ($rule['redeemable_points'] ?? 0),
+            'conditions'     => $rule['conditions'] ?? null,
         ], $this->normalize_api_list($data));
     }
 
@@ -215,14 +214,16 @@ class ReLoopin_Loyalty_Launcher
 
     private function transform_campaigns(array $data): array
     {
+        $campaigns = $data['eligible_campaigns'] ?? $this->normalize_api_list($data);
+
         return array_map(fn(array $c): array => [
-            'id'             => (int)    ($c['id']             ?? 0),
-            'name'           => (string) ($c['name']           ?? ''),
-            'campaign_type'  => (string) ($c['campaign_type']  ?? ''),
-            'points_cost'    => (int)    ($c['points_cost']    ?? 0),
-            'discount_type'  => (string) ($c['discount_type']  ?? ''),
-            'discount_value' => (string) ($c['discount_value'] ?? '0'),
-        ], $this->normalize_api_list($data));
+            'id'             => (int)    ($c['id']               ?? 0),
+            'name'           => (string) ($c['name']             ?? ''),
+            'campaign_type'  => (string) ($c['campaign_type']    ?? ''),
+            'points_cost'    => (int)    ($c['redeemable_points'] ?? 0),
+            'discount_type'  => (string) ($c['coupon_type']      ?? ''),
+            'discount_value' => (string) ($c['discount_value']   ?? '0'),
+        ], $campaigns);
     }
 
     // -----------------------------------------------------------------------
@@ -472,17 +473,8 @@ class ReLoopin_Loyalty_Launcher
             wp_send_json_success($cached);
         }
 
-        // Fetch available_points — from transient if warm, else from API.
-        $bal_cached = get_transient($this->cache_key('bal', (string) $user_id));
-        if ($bal_cached !== false) {
-            $available_points = (int) ($bal_cached['available_points'] ?? 0);
-        } else {
-            $user         = wp_get_current_user();
-            $balance_data = $this->api->get_balance($user->user_email);
-            $available_points = is_wp_error($balance_data) ? 0 : (int) ($balance_data['available_points'] ?? 0);
-        }
-
-        $data = $this->api->get_campaigns($available_points);
+        $user = wp_get_current_user();
+        $data = $this->api->get_campaigns($user->user_email);
 
         if (is_wp_error($data)) {
             wp_send_json_error([
@@ -515,7 +507,7 @@ class ReLoopin_Loyalty_Launcher
             wp_send_json_success($cached);
         }
 
-        $data = $this->api->get_campaigns(0);
+        $data = $this->api->get_campaigns('');
 
         if (is_wp_error($data)) {
             wp_send_json_error([

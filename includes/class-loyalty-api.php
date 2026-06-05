@@ -130,45 +130,30 @@ class ReLoopin_Loyalty_API
     }
 
     /**
-     * Get all points earning/spending rules for the merchant.
-     *
-     * @param string|null $event_type  Filter by event type (e.g. product_purchase, signup, birthday, referral).
+     * Get all active points earning/spending rules for the merchant.
      */
-    public function get_rules(?string $event_type = null): array|WP_Error
+    public function get_rules(): array|WP_Error
     {
-        // The launcher consumes the full rule set at once (cached + filtered client-side),
-        // so request a single large page. The backend requires page + page_size (HTTP 422 otherwise).
-        $params = [
-            'merchant_id' => $this->merchant_id,
-            'page'        => 1,
-            'page_size'   => 100,
-        ];
+        $endpoint = '/api/v1/external/merchant/' . urlencode($this->merchant_id) . '/points/rules';
 
-        if ($event_type !== null) {
-            $endpoint = '/api/v1/external/merchant/points/rules/event/' . urlencode($event_type);
-        } else {
-            $endpoint = '/api/v1/external/merchant/points/rules/';
-            $params['active_only'] = 'true';
-        }
+        reloopin_loyalty_debug('get_rules → request', ['merchant_id' => $this->merchant_id]);
 
-        reloopin_loyalty_debug('get_rules → request', $params);
-
-        return $this->get($endpoint, $params);
+        return $this->get($endpoint);
     }
 
     /**
-     * Get campaigns eligible for the customer's current points balance.
+     * Get eligible campaigns for a customer.
      *
-     * @param int $customer_points Customer's available points.
+     * @param string $customer_ref Customer email address.
      */
-    public function get_campaigns(int $customer_points): array|WP_Error
+    public function get_campaigns(string $customer_ref): array|WP_Error
     {
+        $endpoint = '/api/v1/external/customers/eligible-campaigns';
+        $params   = ['customer_ref' => $customer_ref];
 
-        $endpoint = '/api/v1/external/campaigns?merchant_id=' . rawurlencode($this->merchant_id) . '&campaign_type=ONE_TIME_CAMPAIGN&customer_points=' . $customer_points . '&active_only=false';
+        reloopin_loyalty_debug('get_campaigns → request', $params);
 
-        reloopin_loyalty_debug('get_campaigns → request', ['customer_points' => $customer_points]);
-
-        $result = $this->get($endpoint, [], $this->coupon_headers());
+        $result = $this->get($endpoint, $params, $this->coupon_headers());
 
         // 404 means no campaigns are configured for this merchant yet — return empty.
         if (is_wp_error($result)) {
