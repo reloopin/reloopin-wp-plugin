@@ -183,9 +183,10 @@ class ReLoopin_Loyalty_Launcher
         return array_map(fn(array $rule): array => [
             'id'             => (int) ($rule['id'] ?? 0),
             'name'           => $rule['name'] ?? '',
+            'description'    => $rule['description'] ?? '',
             'rule_type'      => $rule['rule_type'] ?? '',
             'event_type'     => $rule['event_type'] ?? '',
-            'points_reduced' => (int) ($rule['redeemable_points'] ?? 0),
+            'earn_rate'      => (float) ($rule['earn_rate'] ?? 0),
             'conditions'     => $rule['conditions'] ?? null,
         ], $this->normalize_api_list($data));
     }
@@ -219,6 +220,7 @@ class ReLoopin_Loyalty_Launcher
         return array_map(fn(array $c): array => [
             'id'             => (int)    ($c['id']               ?? 0),
             'name'           => (string) ($c['name']             ?? ''),
+            'description'    => (string) ($c['description']      ?? ''),
             'campaign_type'  => (string) ($c['campaign_type']    ?? ''),
             'points_cost'    => (int)    ($c['redeemable_points'] ?? 0),
             'discount_type'  => (string) ($c['coupon_type']      ?? ''),

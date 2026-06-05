@@ -393,12 +393,12 @@
         var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="#A8A29E"');
 
         var ptsDisplay = rule.rule_type === 'multiplier'
-          ? t('x_pts', [rule.points_reduced])
-          : '+' + Number(rule.points_reduced || 0).toLocaleString() + ' pts';
+          ? 'x' + Number(rule.earn_rate || 0).toLocaleString() + ' pts'
+          : Number(rule.earn_rate || 0).toLocaleString() + ' pts';
 
-        var subtitle = rule.event_type === 'birthday'
+        var subtitle = rule.description || (rule.event_type === 'birthday'
           ? t('annual_bonus')
-          : t('one_time_bonus');
+          : t('one_time_bonus'));
 
         html += '<div class="rl-earn used">' +
           '<div class="rl-icon ri-' + esc(cfg.color) + ' rl-icon-muted">' + iconSvg + '</div>' +
@@ -425,18 +425,13 @@
         if (rule.event_type === 'birthday') clickAttr = ' style="cursor:pointer" data-action="birthday"';
         if (rule.event_type === 'referral') clickAttr = ' style="cursor:pointer" data-action="referral"';
 
-        var subtitle = '';
-        if (rule.rule_type === 'multiplier' || rule.event_type === 'product_purchase') {
-          subtitle = t('pts_per_dollar', [rule.points_reduced]);
-        } else if (rule.rule_type === 'flat') {
-          subtitle = t('one_time_bonus');
-        } else {
-          subtitle = rule.rule_type || '';
-        }
+        var subtitle = rule.description || (rule.rule_type === 'multiplier'
+          ? t('pts_per_dollar', [rule.earn_rate])
+          : t('one_time_bonus'));
 
         var ptsDisplay = rule.rule_type === 'multiplier'
-          ? t('x_pts', [rule.points_reduced])
-          : '+' + Number(rule.points_reduced || 0).toLocaleString() + ' pts';
+          ? 'x' + Number(rule.earn_rate || 0).toLocaleString() + ' pts'
+          : Number(rule.earn_rate || 0).toLocaleString() + ' pts';
 
         var pillLabel = rule.event_type === 'birthday' ? esc(t('add_now'))
           : rule.event_type === 'referral' ? esc(t('get_link'))
@@ -531,7 +526,7 @@
         + '<div class="rl-icon ri-fuch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>'
         + '<div class="rl-redeem-body">'
         + '<div class="rl-redeem-title">' + esc(camp.name) + '</div>'
-        + '<div class="rl-redeem-sub">' + esc(discount) + '</div>'
+        + (camp.description ? '<div class="rl-redeem-sub">' + esc(camp.description) + '</div>' : '')
         + '</div>'
         + '<div class="rl-redeem-r">' + rightHtml + '</div>'
         + '</div>';
@@ -692,15 +687,12 @@
           .replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
 
         var ptsDisplay = item.rule_type === 'multiplier'
-          ? t('x_pts', [item.points_reduced])
-          : '+' + Number(item.points_reduced || 0).toLocaleString() + ' pts';
+          ? 'x' + Number(item.earn_rate || 0).toLocaleString() + ' pts'
+          : Number(item.earn_rate || 0).toLocaleString() + ' pts';
 
-        var subtitle = '';
-        if (item.rule_type === 'multiplier' || item.event_type === 'product_purchase') {
-          subtitle = t('pts_per_dollar', [item.points_reduced]);
-        } else {
-          subtitle = t('one_time_bonus');
-        }
+        var subtitle = item.description || (item.rule_type === 'multiplier'
+          ? t('pts_per_dollar', [item.earn_rate])
+          : t('one_time_bonus'));
 
         html += '<div class="rl-accord-row">'
           + '<div class="rl-accord-row-icon" style="background:' + bgColor + '">' + iconSvg + '</div>'
@@ -716,7 +708,7 @@
           + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
           + '</div>'
           + '<div class="rl-accord-row-body"><div class="rl-accord-row-title">' + esc(item.name) + '</div>'
-          + '<div class="rl-accord-row-sub">' + esc(discount) + '</div></div>'
+          + (item.description ? '<div class="rl-accord-row-sub">' + esc(item.description) + '</div>' : '') + '</div>'
           + '<div class="rl-accord-row-pts" style="color:#A855F7">' + esc(Number(item.points_cost || 0).toLocaleString()) + ' pts</div>'
           + '</div>';
       }
