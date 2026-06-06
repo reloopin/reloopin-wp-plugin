@@ -96,10 +96,26 @@ class ReLoopin_Loyalty_API
     {
         reloopin_loyalty_debug('get_balance → request', ['customer_ref' => $customer_ref]);
 
-        return $this->get('/api/v1/merchant/points/customer/balance', [
+        $result = $this->get('/api/v1/merchant/points/customer/balance', [
             'merchant_id'  => $this->merchant_id,
             'customer_ref' => $customer_ref,
         ], $this->platform_headers());
+
+        // 404 means the customer has no points record yet — return zero balance.
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data('loyalty_api_error');
+            if (isset($data['status']) && (int) $data['status'] === 404) {
+                return [
+                    'available_points' => 0,
+                    'lifetime_points'  => 0,
+                    'redeemed_points'  => 0,
+                    'expired_points'   => 0,
+                    'tier'             => '',
+                ];
+            }
+        }
+
+        return $result;
     }
 
     /**
