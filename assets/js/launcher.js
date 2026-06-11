@@ -580,6 +580,17 @@
           copyCouponCode(data.code, copyBtn);
         });
       }
+
+      // Update balance after points deduction.
+      if (data.balance) {
+        applyUserData(data.balance);
+        var redeemGroup = document.querySelector('#rl-redeem-content .rl-group span');
+        if (redeemGroup) {
+          var newPts = Number(data.balance.available_points || 0);
+          redeemGroup.textContent = t('redeem_your_points', [newPts.toLocaleString()]);
+        }
+        campaignsLoaded = false;
+      }
     }, function () {
       cardEl.classList.remove('rl-loading');
       cardEl.classList.add('can');

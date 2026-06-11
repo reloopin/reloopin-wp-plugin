@@ -564,11 +564,20 @@ class ReLoopin_Loyalty_Launcher
         delete_transient($this->cache_key('camps', $uid));
         delete_transient($this->cache_key('bal', $uid));
 
+        // Fetch fresh balance so the launcher can update immediately.
+        $balance_payload = null;
+        $balance_data    = $this->api->get_balance($customer_ref);
+        if (!is_wp_error($balance_data)) {
+            $balance_payload = $this->transform_balance($balance_data, $user);
+            set_transient($this->cache_key('bal', $uid), $balance_payload, self::CACHE_TTL_SHORT);
+        }
+
         wp_send_json_success([
             'code'           => $code,
             'discount_type'  => $result['discount_type']  ?? '',
             'discount_value' => $result['discount_value'] ?? '',
             'expires_at'     => $result['expires_at']     ?? '',
+            'balance'        => $balance_payload,
         ]);
     }
 
