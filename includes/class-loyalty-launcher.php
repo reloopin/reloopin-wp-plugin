@@ -42,6 +42,7 @@ class ReLoopin_Loyalty_Launcher
         add_action('wp_ajax_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns']);
         add_action('wp_ajax_nopriv_reloopin_launcher_campaigns', [$this, 'ajax_launcher_campaigns_guest']);
         add_action('wp_ajax_reloopin_generate_coupon',    [$this, 'ajax_generate_coupon']);
+        add_action('wp_ajax_reloopin_launcher_coupons',  [$this, 'ajax_launcher_coupons']);
 
         // Earn status + birthday save (logged-in only)
         add_action('wp_ajax_reloopin_launcher_earn_status', [$this, 'ajax_launcher_earn_status']);
@@ -228,6 +229,23 @@ class ReLoopin_Loyalty_Launcher
         ], $campaigns);
     }
 
+    private function transform_customer_coupons(array $data): array
+    {
+        $coupons = $this->normalize_api_list($data);
+
+        return array_map(fn(array $c): array => [
+            'id'               => (int)    ($c['id']                ?? 0),
+            'code'             => (string) ($c['code']              ?? ''),
+            'status'           => (string) ($c['status']            ?? ''),
+            'expires_at'       => (string) ($c['expires_at']        ?? ''),
+            'redeemable_points'=> (int)    ($c['redeemable_points'] ?? 0),
+            'campaign_name'    => (string) ($c['campaign']['name']           ?? ''),
+            'discount_type'    => (string) ($c['campaign']['coupon_type']    ?? ''),
+            'discount_value'   => (string) ($c['campaign']['discount_value'] ?? '0'),
+            'min_order_amount' => (float)  ($c['campaign']['min_order_amount'] ?? 0),
+        ], $coupons);
+    }
+
     // -----------------------------------------------------------------------
     // Cache invalidation
     // -----------------------------------------------------------------------
@@ -247,6 +265,7 @@ class ReLoopin_Loyalty_Launcher
         delete_transient($this->cache_key('bal', $uid));
         delete_transient($this->cache_key('earn_status', $uid));
         delete_transient($this->cache_key('camps', $uid));
+        delete_transient($this->cache_key('coupons', $uid));
 
         // Bump generation counter so all history cache keys become stale.
         // Old transients expire naturally via TTL (5 min).
@@ -333,6 +352,11 @@ class ReLoopin_Loyalty_Launcher
                 'annual_bonus'       => __('Annual bonus active', 'reloopin-loyalty'),
                 'campaigns_error'    => __('Could not load rewards.', 'reloopin-loyalty'),
                 'no_campaigns'       => __('No rewards available yet. Keep earning points!', 'reloopin-loyalty'),
+                'your_coupons'       => __('Your coupons', 'reloopin-loyalty'),
+                'no_coupons'         => __('No active coupons. Redeem your points to get one!', 'reloopin-loyalty'),
+                'coupons_error'      => __('Could not load your coupons.', 'reloopin-loyalty'),
+                /* translators: %s: minimum order amount */
+                'min_order'          => __('Min order: $%s', 'reloopin-loyalty'),
                 'generating'         => __('Generating…', 'reloopin-loyalty'),
                 'coupon_generated'   => __('Coupon generated!', 'reloopin-loyalty'),
                 /* translators: %s: coupon code */
@@ -559,10 +583,11 @@ class ReLoopin_Loyalty_Launcher
 
         $this->apply_wc_coupon($code, $result, $customer_ref);
 
-        // Invalidate campaigns + balance cache — points deducted after generation.
+        // Invalidate campaigns + balance + coupons cache — points deducted after generation.
         $uid = (string) get_current_user_id();
         delete_transient($this->cache_key('camps', $uid));
         delete_transient($this->cache_key('bal', $uid));
+        delete_transient($this->cache_key('coupons', $uid));
 
         // Fetch fresh balance so the launcher can update immediately.
         $balance_payload = null;
@@ -628,6 +653,45 @@ class ReLoopin_Loyalty_Launcher
             'coupon_id' => $coupon_id,
             'code'      => $code,
         ]);
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX: Customer coupons (logged-in only)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_coupons(): void
+    {
+        check_ajax_referer('reloopin_launcher', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => 'not_logged_in']);
+        }
+
+        if (!$this->check_rate_limit('launcher_coupons')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
+        $user_id   = get_current_user_id();
+        $cache_key = $this->cache_key('coupons', (string) $user_id);
+        $cached    = get_transient($cache_key);
+
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+
+        $user = wp_get_current_user();
+        $data = $this->api->get_customer_coupons($user->user_email, 'active');
+
+        if (is_wp_error($data)) {
+            wp_send_json_error([
+                'message' => $data->get_error_message(),
+                'code'    => $data->get_error_code(),
+            ]);
+        }
+
+        $payload = $this->transform_customer_coupons($data);
+        set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
+        wp_send_json_success($payload);
     }
 
     // -----------------------------------------------------------------------

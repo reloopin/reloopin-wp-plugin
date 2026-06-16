@@ -180,6 +180,38 @@ class ReLoopin_Loyalty_API
     }
 
     /**
+     * Get a customer's active coupons.
+     *
+     * @param string $customer_ref Customer email or phone.
+     * @param string $status       One of: active, redeemed, expired, voided.
+     */
+    public function get_customer_coupons(string $customer_ref, string $status = 'active'): array|WP_Error
+    {
+        $endpoint = '/api/v1/external/customers/' . urlencode($customer_ref) . '/coupons';
+        $params   = [];
+        if ($status) {
+            $params['status'] = $status;
+        }
+
+        reloopin_loyalty_debug('get_customer_coupons → request', [
+            'customer_ref' => $customer_ref,
+            'status'       => $status,
+        ]);
+
+        $result = $this->get($endpoint, $params, $this->platform_headers());
+
+        // 404 means the customer has no coupons — return empty.
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data('loyalty_api_error');
+            if (isset($data['status']) && (int) $data['status'] === 404) {
+                return [];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Generate a coupon code for a campaign.
      *
      * Response: code, campaign_id, customer_ref, expires_at, discount_type, discount_value

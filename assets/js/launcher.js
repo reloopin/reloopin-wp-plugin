@@ -45,6 +45,8 @@
   var currentRules     = [];     // module-level so birthday save can re-render
   var campaignsLoaded  = false;
   var campaignsData    = [];
+  var couponsLoaded    = false;
+  var couponsData      = [];
   var guestRulesLoaded     = false;
   var guestCampaignsLoaded = false;
 
@@ -495,8 +497,11 @@
     var container = document.getElementById('rl-redeem-content');
     if (!container) return;
 
+    // Coupons section placeholder (rendered by fetchCustomerCoupons)
+    var html = '<div id="rl-coupons-section"></div>';
+
     var pts  = userData ? (userData.available_points || 0) : 0;
-    var html = '<div class="rl-group"><span>'
+    html += '<div class="rl-group"><span>'
       + esc(t('redeem_your_points', [pts.toLocaleString()]))
       + '</span><span class="rl-group-line"></span></div>';
 
@@ -504,6 +509,7 @@
       html += '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:1.5rem 0;line-height:1.6">'
         + esc(t('no_campaigns')) + '</p>';
       container.innerHTML = html;
+      if (!couponsLoaded) fetchCustomerCoupons();
       return;
     }
 
@@ -538,6 +544,86 @@
       card.addEventListener('click', function () {
         var id = parseInt(card.getAttribute('data-campaign-id'), 10);
         if (id) handleCouponGenerate(id, card);
+      });
+    });
+
+    // Fetch coupons after campaigns are rendered
+    if (!couponsLoaded) fetchCustomerCoupons();
+  }
+
+  // ── Customer Coupons (Redeem tab) ───────────────────────────────────────
+
+  function fetchCustomerCoupons() {
+    if (!isLoggedIn) return;
+    couponsLoaded = true; // prevent double-fire
+
+    ajaxPost('reloopin_launcher_coupons', null, function (data) {
+      couponsData = data || [];
+      renderCouponsSection(couponsData);
+    }, function () {
+      couponsLoaded = false; // allow retry on next tab visit
+      var section = document.getElementById('rl-coupons-section');
+      if (section) {
+        section.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.75rem;padding:.5rem 0">'
+          + esc(t('coupons_error')) + '</p>';
+      }
+    });
+  }
+
+  function renderCouponsSection(coupons) {
+    var section = document.getElementById('rl-coupons-section');
+    if (!section) return;
+
+    if (!coupons || coupons.length === 0) {
+      section.innerHTML = '<p style="text-align:center;color:#9B96B0;font-size:.72rem;padding:.75rem 0;line-height:1.5">'
+        + esc(t('no_coupons')) + '</p>';
+      return;
+    }
+
+    var html = '<div class="rl-group"><span>'
+      + esc(t('your_coupons'))
+      + '</span><span class="rl-group-line"></span></div>';
+
+    coupons.forEach(function (coupon) {
+      var discount = formatDiscount(coupon.discount_type, coupon.discount_value);
+      var metaParts = [];
+
+      if (coupon.campaign_name) {
+        metaParts.push(esc(coupon.campaign_name));
+      }
+      if (coupon.min_order_amount > 0) {
+        metaParts.push(esc(t('min_order', [Number(coupon.min_order_amount).toFixed(2)])));
+      }
+      if (coupon.expires_at) {
+        var d = new Date(coupon.expires_at);
+        if (!isNaN(d.getTime())) {
+          metaParts.push(esc(t('discount_expires')) + ' ' + esc(d.toLocaleDateString()));
+        }
+      }
+
+      html += '<div class="rl-coupon-card">'
+        + '<div class="rl-coupon-reveal">'
+        + '<div class="rl-coupon-label">' + esc(discount) + '</div>'
+        + '<div class="rl-coupon-box">'
+        + '<span class="rl-coupon-code">' + esc(coupon.code) + '</span>'
+        + '<button type="button" class="rl-coupon-copy-btn" data-code="' + esc(coupon.code) + '">'
+        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+        + '<span class="rl-coupon-copy-label">' + esc(t('copy_code')) + '</span>'
+        + '</button>'
+        + '</div>'
+        + (metaParts.length > 0
+          ? '<div class="rl-coupon-meta">' + metaParts.join(' &middot; ') + '</div>'
+          : '')
+        + '</div>'
+        + '</div>';
+    });
+
+    section.innerHTML = html;
+
+    section.querySelectorAll('.rl-coupon-copy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        copyCouponCode(btn.getAttribute('data-code'), btn);
       });
     });
   }
@@ -590,6 +676,7 @@
           redeemGroup.textContent = t('redeem_your_points', [newPts.toLocaleString()]);
         }
         campaignsLoaded = false;
+        couponsLoaded   = false;
       }
     }, function () {
       cardEl.classList.remove('rl-loading');

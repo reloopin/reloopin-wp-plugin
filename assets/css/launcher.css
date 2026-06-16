@@ -1388,6 +1388,8 @@
 #rl-root .rl-coupon-copy-btn.copied { color: #059669 !important; border-color: rgba(5,150,105,.3) !important; }
 #rl-root .rl-coupon-expires { display: block !important; font-size: .62rem !important; color: #9B96B0 !important; margin-top: .2rem !important; }
 #rl-root .rl-coupon-hint   { font-size: .62rem !important; color: #059669 !important; margin-top: .3rem !important; font-weight: 500 !important; display: block !important; }
+#rl-root .rl-coupon-card   { background: #fff !important; border: 1px solid rgba(96,84,208,.12) !important; border-radius: 10px !important; padding: .65rem .75rem !important; margin-bottom: .5rem !important; }
+#rl-root .rl-coupon-meta   { font-size: .62rem !important; color: #9B96B0 !important; margin-top: .25rem !important; line-height: 1.5 !important; }
 
 /* ── GENERATING SPINNER (small, inline in card right column) ── */
 #rl-root .rl-redeem-generating { display: flex !important; align-items: center !important; gap: .4rem !important; justify-content: flex-end !important; font-size: .67rem !important; color: #9B96B0 !important; }
