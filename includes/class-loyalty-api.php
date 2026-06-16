@@ -40,7 +40,7 @@ class ReLoopin_Loyalty_API
         $body = [
             'merchant_id' => $this->merchant_id,
             'platform' => RELOOPIN_LOYALTY_PLATFORM,
-            'customer_email' => $args['customer_email'] ?? '',
+            'customer_ref' => $args['customer_ref'] ?? '',
             'order_id' => (string) ($args['order_id'] ?? ''),
             'event_type' => $args['event_type'] ?? 'product_purchase',
             'total_amount' => (string) ($args['total_amount'] ?? '1.00'),

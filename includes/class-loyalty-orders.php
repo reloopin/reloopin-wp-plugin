@@ -58,12 +58,12 @@ class ReLoopin_Loyalty_Orders
         $customer_id = (int) $order->get_customer_id();
         if ($customer_id > 0) {
             $user = get_user_by('id', $customer_id);
-            $customer_email = $user ? $user->user_email : $order->get_billing_email();
+            $customer_ref = $user ? $user->user_email : $order->get_billing_email();
         } else {
-            $customer_email = $order->get_billing_email();
+            $customer_ref = $order->get_billing_email();
         }
 
-        if (empty($customer_email)) {
+        if (empty($customer_ref)) {
             reloopin_loyalty_debug("orders: order #{$order_id} has no email — skipping");
             return;
         }
@@ -90,7 +90,7 @@ class ReLoopin_Loyalty_Orders
 
         foreach ($pending as $event_type) {
             $result = $this->api->create_transaction([
-                'customer_email'       => $customer_email,
+                'customer_ref'         => $customer_ref,
                 'customer_phone'       => $order->get_billing_phone(),
                 'order_id'             => $base_order_number . '-' . $event_type,
                 'event_type'           => $event_type,
@@ -183,11 +183,11 @@ class ReLoopin_Loyalty_Orders
         }
 
         $customer_id    = (int) $order->get_customer_id();
-        $customer_email = $customer_id > 0
+        $customer_ref = $customer_id > 0
             ? (($user = get_user_by('id', $customer_id)) ? $user->user_email : $order->get_billing_email())
             : $order->get_billing_email();
 
-        if (empty($customer_email)) {
+        if (empty($customer_ref)) {
             reloopin_loyalty_debug("orders: order #{$order_id} has no email — skipping coupon redemption");
             return;
         }
@@ -227,7 +227,7 @@ class ReLoopin_Loyalty_Orders
 
             $result = $this->api->redeem_coupon(
                 $api_code,
-                $customer_email,
+                $customer_ref,
                 'WC-' . $order->get_order_number(),
                 number_format((float) $order->get_total(), 2, '.', ''),
                 get_woocommerce_currency()
