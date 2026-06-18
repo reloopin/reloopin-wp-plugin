@@ -120,6 +120,16 @@ class ReLoopin_Loyalty_API
             }
         }
 
+        // Guard against unexpected response shapes (e.g. empty array from edge cases).
+        if (is_array($result) && !isset($result['available_points'])) {
+            reloopin_loyalty_debug('get_balance → unexpected response shape', array_keys($result));
+            return new WP_Error(
+                'loyalty_bad_response',
+                'API response missing expected fields',
+                ['keys' => array_keys($result)]
+            );
+        }
+
         return $result;
     }
 
@@ -343,7 +353,8 @@ class ReLoopin_Loyalty_API
         }
 
         $status_code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $raw_body    = wp_remote_retrieve_body($response);
+        $body        = json_decode($raw_body, true);
 
         if ($status_code < 200 || $status_code >= 300) {
             $message = $body['detail'] ?? $body['error'] ?? $body['message'] ?? 'HTTP ' . $status_code;
@@ -351,7 +362,15 @@ class ReLoopin_Loyalty_API
             return new WP_Error('loyalty_api_error', $message, ['status' => $status_code]);
         }
 
-        reloopin_loyalty_debug("{$method} {$endpoint} → HTTP {$status_code} OK");
+        if ($body === null && json_last_error() !== JSON_ERROR_NONE) {
+            reloopin_loyalty_debug("{$method} {$endpoint} → JSON decode failed", [
+                'error'        => json_last_error_msg(),
+                'body_preview' => substr($raw_body, 0, 500),
+            ]);
+            return new WP_Error('loyalty_json_error', 'Invalid JSON response: ' . json_last_error_msg());
+        }
+
+        reloopin_loyalty_debug("{$method} {$endpoint} → HTTP {$status_code} OK", substr($raw_body, 0, 500));
 
         return is_array($body) ? $body : [];
     }

@@ -253,8 +253,16 @@
 
       // Load rules
       if (!rulesLoaded) fetchRules();
-    }, function () {
+    }, function (errData) {
       dataLoaded = false;
+      // Show error indicator instead of leaving stale "..."
+      var ptsNum = document.getElementById('rl-pts-num');
+      if (ptsNum) ptsNum.textContent = '--';
+      var launcherPts = document.getElementById('rl-launcher-pts');
+      if (launcherPts) launcherPts.textContent = '-- pts';
+      console.warn('[reLoopin] Balance fetch failed', errData);
+      // Still load rules so the Earn tab works even if balance fails
+      if (!rulesLoaded) fetchRules();
     });
   }
 
