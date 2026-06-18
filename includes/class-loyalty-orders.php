@@ -55,20 +55,12 @@ class ReLoopin_Loyalty_Orders
             return;
         }
 
-        $customer_id = (int) $order->get_customer_id();
-        if ($customer_id > 0) {
-            $user = get_user_by('id', $customer_id);
-            $customer_ref = $user ? $user->user_email : $order->get_billing_email();
-        } else {
-            $customer_ref = $order->get_billing_email();
-        }
+        $customer_ref = $this->resolve_customer_ref($order);
 
-        if (empty($customer_ref)) {
-            reloopin_loyalty_debug("orders: order #{$order_id} has no email — skipping");
-            return;
-        }
-
-        reloopin_loyalty_debug("orders: pending events for order #{$order_id}", $pending);
+        reloopin_loyalty_debug("orders: pending events for order #{$order_id}", [
+            'customer_ref' => $customer_ref,
+            'events'       => $pending,
+        ]);
 
         // Build line-item metadata once — shared across all event transactions.
         $items = [];
@@ -182,15 +174,7 @@ class ReLoopin_Loyalty_Orders
             $posted = [];
         }
 
-        $customer_id    = (int) $order->get_customer_id();
-        $customer_ref = $customer_id > 0
-            ? (($user = get_user_by('id', $customer_id)) ? $user->user_email : $order->get_billing_email())
-            : $order->get_billing_email();
-
-        if (empty($customer_ref)) {
-            reloopin_loyalty_debug("orders: order #{$order_id} has no email — skipping coupon redemption");
-            return;
-        }
+        $customer_ref = $this->resolve_customer_ref($order);
 
         foreach ($coupon_codes as $code) {
             if (in_array($code, $posted, true)) {
@@ -262,6 +246,38 @@ class ReLoopin_Loyalty_Orders
     }
 
     // -----------------------------------------------------------------------
+
+    /**
+     * Resolve a non-empty customer_ref for loyalty API calls.
+     *
+     * Priority: account email → billing email → billing phone → order-scoped guest ref.
+     */
+    private function resolve_customer_ref(WC_Order $order): string
+    {
+        $customer_id = (int) $order->get_customer_id();
+
+        if ($customer_id > 0) {
+            $user = get_user_by('id', $customer_id);
+            if ($user) {
+                $account_email = trim((string) $user->user_email);
+                if ($account_email !== '') {
+                    return $account_email;
+                }
+            }
+        }
+
+        $billing_email = trim((string) $order->get_billing_email());
+        if ($billing_email !== '') {
+            return $billing_email;
+        }
+
+        $billing_phone = trim((string) $order->get_billing_phone());
+        if ($billing_phone !== '') {
+            return $billing_phone;
+        }
+
+        return 'guest-WC-' . $order->get_order_number();
+    }
 
     private function resolve_event_types(WC_Order $order): array
     {

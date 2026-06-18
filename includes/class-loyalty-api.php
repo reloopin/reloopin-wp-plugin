@@ -37,10 +37,15 @@ class ReLoopin_Loyalty_API
      */
     public function create_transaction(array $args): array|WP_Error
     {
+        $customer_ref = trim((string) ($args['customer_ref'] ?? ''));
+        if ($customer_ref === '' && !empty($args['order_id'])) {
+            $customer_ref = 'guest-' . (string) $args['order_id'];
+        }
+
         $body = [
             'merchant_id' => $this->merchant_id,
             'platform' => RELOOPIN_LOYALTY_PLATFORM,
-            'customer_ref' => $args['customer_ref'] ?? '',
+            'customer_ref' => $customer_ref,
             'order_id' => (string) ($args['order_id'] ?? ''),
             'event_type' => $args['event_type'] ?? 'product_purchase',
             'total_amount' => (string) ($args['total_amount'] ?? '1.00'),
