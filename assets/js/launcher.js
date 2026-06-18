@@ -930,7 +930,7 @@
         var sign = pts >= 0 ? '+' : '';
         var ptsCls = pts >= 0 ? 'pos' : (type === 'expire' ? 'exp' : 'neg');
 
-        var title = esc(capitalize(type)) + (entry.notes ? ' — ' + esc(entry.notes) : '');
+        var title = entry.notes ? esc(entry.notes) : esc(capitalize(type));
         var date = esc(entry.date || '');
 
         html += '<div class="rl-tx" data-type="' + esc(type) + '">' +
