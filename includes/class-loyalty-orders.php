@@ -104,7 +104,7 @@ class ReLoopin_Loyalty_Orders
                 continue;
             }
 
-            $tx_id                   = $result['id'] ?? 'n/a';
+            $tx_id                   = $result['transaction']['id'] ?? 'n/a';
             $succeeded[$event_type]  = $tx_id;
             $posted_events[]         = $event_type;
 

@@ -14,7 +14,6 @@ class ReLoopin_Loyalty_API
     private string $base_url;
     private string $api_key;
     private string $merchant_id;
-    private string $merchant_code;
     private string $currency_code;
 
     public function __construct()
@@ -22,7 +21,6 @@ class ReLoopin_Loyalty_API
         $this->base_url      = rtrim(get_option('reloopin_loyalty_api_url', ''), '/');
         $this->api_key       = get_option('reloopin_loyalty_api_key', '');
         $this->merchant_id   = get_option('reloopin_loyalty_merchant_id', '');
-        $this->merchant_code = get_option('reloopin_loyalty_merchant_code', '');
         $this->currency_code = get_woocommerce_currency();
     }
 
@@ -33,7 +31,7 @@ class ReLoopin_Loyalty_API
     /**
      * Post a transaction entry to the loyalty backend.
      *
-     * Uses reloopin_api_key + merchant_code headers (transaction-entry auth).
+     * Merchant and platform are derived from the API key.
      */
     public function create_transaction(array $args): array|WP_Error
     {
@@ -43,8 +41,6 @@ class ReLoopin_Loyalty_API
         }
 
         $body = [
-            'merchant_id' => $this->merchant_id,
-            'platform' => RELOOPIN_LOYALTY_PLATFORM,
             'customer_ref' => $customer_ref,
             'order_id' => (string) ($args['order_id'] ?? ''),
             'event_type' => $args['event_type'] ?? 'product_purchase',
@@ -63,7 +59,7 @@ class ReLoopin_Loyalty_API
 
         reloopin_loyalty_debug('create_transaction → request body', $body);
 
-        return $this->post('/api/v1/merchant/transaction-entry', $body, $this->transaction_headers());
+        return $this->post('/api/v1/merchant/transaction-entry', $body);
     }
 
     /**
@@ -102,9 +98,8 @@ class ReLoopin_Loyalty_API
         reloopin_loyalty_debug('get_balance → request', ['customer_ref' => $customer_ref]);
 
         $result = $this->get('/api/v1/merchant/points/customer/balance', [
-            'merchant_id'  => $this->merchant_id,
             'customer_ref' => $customer_ref,
-        ], $this->platform_headers());
+        ]);
 
         // 404 means the customer has no points record yet — return zero balance.
         if (is_wp_error($result)) {
@@ -136,25 +131,23 @@ class ReLoopin_Loyalty_API
     /**
      * Get paginated ledger history for a customer.
      *
-     * @param string|null $entry_type  earn|redeem|bonus|expire|void|adjust
+     * @param string|null $entry_type  EARN or REDEEM
      */
     public function get_history(string $customer_ref, int $page = 1, int $page_size = 10, ?string $entry_type = null): array|WP_Error
     {
-        $endpoint = '/api/v1/external/merchant/' . urlencode($this->merchant_id) . '/points/history';
-
         $params = [
             'customer_ref' => $customer_ref,
             'page' => $page,
             'page_size' => $page_size,
         ];
 
-        if ($entry_type !== null) {
-            $params['entry_type'] = $entry_type;
+        if ($entry_type !== null && $entry_type !== '') {
+            $params['entry_type'] = strtoupper($entry_type);
         }
 
         reloopin_loyalty_debug('get_history → request', $params);
 
-        return $this->get($endpoint, $params);
+        return $this->get('/api/v1/external/points/history', $params);
     }
 
     /**
@@ -162,11 +155,9 @@ class ReLoopin_Loyalty_API
      */
     public function get_rules(): array|WP_Error
     {
-        $endpoint = '/api/v1/external/merchant/' . urlencode($this->merchant_id) . '/points/rules';
+        reloopin_loyalty_debug('get_rules → request');
 
-        reloopin_loyalty_debug('get_rules → request', ['merchant_id' => $this->merchant_id]);
-
-        return $this->get($endpoint);
+        return $this->get('/api/v1/external/points/rules');
     }
 
     /**
@@ -176,12 +167,11 @@ class ReLoopin_Loyalty_API
      */
     public function get_campaigns(string $customer_ref): array|WP_Error
     {
-        $endpoint = '/api/v1/external/customers/eligible-campaigns';
-        $params   = ['customer_ref' => $customer_ref];
+        $params = ['customer_ref' => $customer_ref];
 
         reloopin_loyalty_debug('get_campaigns → request', $params);
 
-        $result = $this->get($endpoint, $params, $this->coupon_headers());
+        $result = $this->get('/api/v1/external/customers/eligible-campaigns', $params);
 
         // 404 means no campaigns are configured for this merchant yet — return empty.
         if (is_wp_error($result)) {
@@ -213,7 +203,7 @@ class ReLoopin_Loyalty_API
             'status'       => $status,
         ]);
 
-        $result = $this->get($endpoint, $params, $this->platform_headers());
+        $result = $this->get($endpoint, $params);
 
         // 404 means the customer has no coupons — return empty.
         if (is_wp_error($result)) {
@@ -229,7 +219,7 @@ class ReLoopin_Loyalty_API
     /**
      * Generate a coupon code for a campaign.
      *
-     * Response: code, campaign_id, customer_ref, expires_at, discount_type, discount_value
+     * Response: code, campaign_id, customer_ref, expires_at, discount_type, discount_value, platform_sync
      */
     public function generate_coupon(int $campaign_id, string $customer_ref): array|WP_Error
     {
@@ -238,10 +228,12 @@ class ReLoopin_Loyalty_API
             'customer_ref' => $customer_ref,
         ]);
 
-        return $this->post('/api/v1/external/coupons/generate', [
+        $result = $this->post('/api/v1/external/coupons/generate', [
             'campaign_id'  => $campaign_id,
             'customer_ref' => $customer_ref,
-        ], $this->coupon_headers());
+        ]);
+
+        return $this->validate_platform_sync($result, 'generate_coupon');
     }
 
     /**
@@ -262,33 +254,34 @@ class ReLoopin_Loyalty_API
             'currency_code' => $currency_code,
         ]);
 
-        return $this->post('/api/v1/external/coupons/redeem', [
+        $result = $this->post('/api/v1/external/coupons/redeem', [
             'code'          => $code,
             'customer_ref'  => $customer_ref,
             'order_ref'     => $order_ref,
             'order_total'   => $order_total,
             'currency_code' => $currency_code,
-        ], $this->coupon_headers());
+        ]);
+
+        return $this->validate_platform_sync($result, 'redeem_coupon');
     }
 
     // -----------------------------------------------------------------------
     // Private HTTP helpers
     // -----------------------------------------------------------------------
 
-    private function get(string $endpoint, array $query_params = [], array $headers = []): array|WP_Error
+    private function get(string $endpoint, array $query_params = []): array|WP_Error
     {
         if (empty($this->base_url)) {
             reloopin_loyalty_debug('GET aborted — API URL not configured', $endpoint);
             return new WP_Error('loyalty_no_url', 'Loyalty API URL is not configured.');
         }
 
-        $url     = add_query_arg($query_params, $this->base_url . $endpoint);
-        $headers = $headers ?: $this->platform_headers();
+        $url = add_query_arg($query_params, $this->base_url . $endpoint);
 
         reloopin_loyalty_debug("GET {$url}");
 
         $response = wp_remote_get($url, [
-            'headers' => $headers,
+            'headers' => $this->api_headers(),
             'timeout' => 10,
         ]);
 
@@ -305,7 +298,7 @@ class ReLoopin_Loyalty_API
         reloopin_loyalty_debug("POST {$this->base_url}{$endpoint}");
 
         $response = wp_remote_post($this->base_url . $endpoint, [
-            'headers' => $headers ?: $this->platform_headers(),
+            'headers' => $headers ?: $this->api_headers(),
             'body' => wp_json_encode($body),
             'timeout' => 10,
         ]);
@@ -313,18 +306,17 @@ class ReLoopin_Loyalty_API
         return $this->parse_response($response, 'POST', $endpoint);
     }
 
-    /** Headers for transaction-entry: reloopin_api_key + merchant_code. */
-    private function transaction_headers(): array
+    /** All documented endpoints authenticate via reloopin_api_key; merchant is derived from the key. */
+    private function api_headers(): array
     {
         return [
             'reloopin_api_key' => $this->api_key,
-            'merchant_code' => $this->merchant_code,
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
+            'Content-Type'     => 'application/json',
+            'Accept'           => 'application/json',
         ];
     }
 
-    /** Headers for platform endpoints: reloopin_api_key + merchant_id. */
+    /** Headers for undocumented legacy endpoints that still require merchant_id. */
     private function platform_headers(): array
     {
         return [
@@ -335,14 +327,46 @@ class ReLoopin_Loyalty_API
         ];
     }
 
-    /** Headers for coupon/campaign endpoints: reloopin_api_key only. */
-    private function coupon_headers(): array
+    /**
+     * Log platform_sync results and surface hard failures.
+     *
+     * @param array|WP_Error $result
+     */
+    private function validate_platform_sync(array|WP_Error $result, string $context): array|WP_Error
     {
-        return [
-            'reloopin_api_key' => $this->api_key,
-            'Content-Type'     => 'application/json',
-            'Accept'           => 'application/json',
-        ];
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        $sync = $result['platform_sync'] ?? null;
+        if (!is_array($sync)) {
+            return $result;
+        }
+
+        foreach ($sync as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $status   = $entry['status'] ?? '';
+            $platform = $entry['platform'] ?? 'unknown';
+            $error    = $entry['error'] ?? null;
+
+            if ($status === 'failed') {
+                reloopin_loyalty_debug("{$context} → platform_sync failed", $entry);
+                return new WP_Error(
+                    'loyalty_platform_sync_failed',
+                    is_string($error) && $error !== '' ? $error : "Platform sync failed for {$platform}",
+                    ['platform_sync' => $sync]
+                );
+            }
+
+            if ($status === 'skipped') {
+                reloopin_loyalty_debug("{$context} → platform_sync skipped", $entry);
+            }
+        }
+
+        return $result;
     }
 
     private function parse_response(array|WP_Error $response, string $method, string $endpoint): array|WP_Error

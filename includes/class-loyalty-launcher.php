@@ -465,10 +465,9 @@ class ReLoopin_Loyalty_Launcher
 
     public function ajax_launcher_rules(): void
     {
-        $merchant_id = get_option('reloopin_loyalty_merchant_id', '');
         $this->ajax_cached(
             'rules',
-            $this->cache_key('rules', $merchant_id),
+            $this->cache_key('rules'),
             self::CACHE_TTL_LONG,
             fn() => $this->api->get_rules(),
             fn(array $data) => $this->transform_rules($data),

@@ -27,7 +27,7 @@ Connect your WooCommerce store to the reLoopin loyalty backend. Customers earn p
 
 **Third-party service notice:**
 
-This plugin connects to the reLoopin loyalty platform to store and retrieve points data. An active reLoopin merchant account, API Key, and Merchant ID are required.
+This plugin connects to the reLoopin loyalty platform to store and retrieve points data. An active reLoopin merchant account and API Key are required.
 
 * Service website: [https://reloopin.com](https://reloopin.com)
 * Terms of Use: [https://reloopin.com/terms](https://reloopin.com/terms)
@@ -39,14 +39,15 @@ Customer data sent to reLoopin includes: email address, order total, order numbe
 
 1. Upload the `reloopin-loyalty` folder to the `/wp-content/plugins/` directory, or install via **Plugins > Add New** in your WordPress admin.
 2. Activate the plugin through the **Plugins** menu.
-3. Go to **WooCommerce > Settings > Loyalty** and enter your API Base URL, API Key, Merchant ID, and Merchant Code (all provided by reLoopin).
+3. Go to **WooCommerce > Settings > Loyalty** and enter your API Base URL and API Key,
+Merchant ID (provided by reLoopin).
 4. Optionally configure the launcher widget position and branding under the **Launcher Widget** section of the same settings page.
 
 == Frequently Asked Questions ==
 
 = Do I need a reLoopin account? =
 
-Yes. This plugin is a WooCommerce integration for the reLoopin loyalty service. You will need a Merchant ID, API Key, and API Base URL from your reLoopin merchant dashboard.
+Yes. This plugin is a WooCommerce integration for the reLoopin loyalty service. You will need an API Key and API Base URL from your reLoopin merchant dashboard.
 
 = Does the plugin work without WooCommerce? =
 

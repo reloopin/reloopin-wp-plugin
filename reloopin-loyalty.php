@@ -3,7 +3,7 @@
  * Plugin Name: reLoopin Loyalty
  * Plugin URI:  https://reloopin.com
  * Description: Integrates a custom loyalty points backend with WooCommerce.
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      reLoopin
  * Requires at least: 6.0
  * Requires PHP: 8.0
@@ -18,12 +18,9 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RELOOPIN_LOYALTY_VERSION', '1.1.0');
+define('RELOOPIN_LOYALTY_VERSION', '1.2.0');
 define('RELOOPIN_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RELOOPIN_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
-
-/** Platform integer for WooCommerce in the loyalty backend. */
-define('RELOOPIN_LOYALTY_PLATFORM', 1);
 
 /**
  * Write a debug message to wp-content/debug.log.
@@ -214,13 +211,6 @@ function reloopin_loyalty_get_settings()
             'title' => __('Merchant ID', 'reloopin-loyalty'),
             'desc' => __('Your merchant UUID from the loyalty backend, e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6', 'reloopin-loyalty'),
             'id' => 'reloopin_loyalty_merchant_id',
-            'type' => 'text',
-            'default' => '',
-        ],
-        [
-            'title' => __('Merchant Code', 'reloopin-loyalty'),
-            'desc' => __('Sent as the merchant_code header on transaction-entry requests.', 'reloopin-loyalty'),
-            'id' => 'reloopin_loyalty_merchant_code',
             'type' => 'text',
             'default' => '',
         ],
