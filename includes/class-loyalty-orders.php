@@ -76,15 +76,14 @@ class ReLoopin_Loyalty_Orders
             ];
         }
 
-        $base_order_number = (string) $order->get_order_number();
-        $succeeded         = []; // event_type → transaction_id
-        $failed            = []; // event_type → error_message
+        $succeeded = []; // event_type → transaction_id
+        $failed    = []; // event_type → error_message
 
         foreach ($pending as $event_type) {
             $result = $this->api->create_transaction([
                 'customer_ref'         => $customer_ref,
                 'customer_phone'       => $order->get_billing_phone(),
-                'order_id'             => $base_order_number . '-' . $event_type,
+                'order_id'             => (string) $order->get_order_number(),
                 'event_type'           => $event_type,
                 'total_amount'         => number_format((float) $order->get_total(), 2, '.', ''),
                 'transaction_status'   => 'completed',
