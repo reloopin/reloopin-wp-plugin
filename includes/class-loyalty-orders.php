@@ -29,6 +29,9 @@ class ReLoopin_Loyalty_Orders
         // Track coupon redemptions for reLoopin-generated coupons (priority 20, after post_transaction)
         add_action('woocommerce_payment_complete',        [$this, 'track_coupon_redemptions'], 20, 1);
         add_action('woocommerce_order_status_processing', [$this, 'track_coupon_redemptions'], 20, 1);
+
+        // Async customer enrich (Action Scheduler / WP-Cron) — doesn't block checkout.
+        add_action('reloopin_loyalty_enrich_customer', [$this, 'process_enrich_customer'], 10, 1);
     }
 
     public function post_transaction(int $order_id): void
@@ -41,6 +44,8 @@ class ReLoopin_Loyalty_Orders
             reloopin_loyalty_debug("orders: order #{$order_id} not found — skipping");
             return;
         }
+
+        $this->schedule_enrich_customer($order_id);
 
         $posted_events = json_decode($order->get_meta('_loyalty_events_posted') ?: '[]', true);
         if (!is_array($posted_events)) {
@@ -245,6 +250,124 @@ class ReLoopin_Loyalty_Orders
     }
 
     // -----------------------------------------------------------------------
+
+    /**
+     * Queue placeholder enrich off the checkout request path.
+     *
+     * Prefers Action Scheduler (bundled with WooCommerce); falls back to WP-Cron.
+     */
+    private function schedule_enrich_customer(int $order_id): void
+    {
+        $hook  = 'reloopin_loyalty_enrich_customer';
+        $group = 'reloopin-loyalty';
+        $args  = [$order_id];
+
+        if (function_exists('as_enqueue_async_action') && function_exists('as_has_scheduled_action')) {
+            if (as_has_scheduled_action($hook, $args, $group)) {
+                reloopin_loyalty_debug('orders: enrich already queued', ['order_id' => $order_id]);
+                return;
+            }
+
+            as_enqueue_async_action($hook, $args, $group);
+            reloopin_loyalty_debug('orders: enrich queued (action scheduler)', ['order_id' => $order_id]);
+            return;
+        }
+
+        if (!wp_next_scheduled($hook, $args)) {
+            wp_schedule_single_event(time(), $hook, $args);
+            reloopin_loyalty_debug('orders: enrich queued (wp-cron)', ['order_id' => $order_id]);
+        }
+    }
+
+    /**
+     * Action Scheduler / WP-Cron callback: enrich customer from order billing.
+     */
+    public function process_enrich_customer(int $order_id): void
+    {
+        reloopin_loyalty_debug('orders: process_enrich_customer', ['order_id' => $order_id]);
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            reloopin_loyalty_debug("orders: enrich order #{$order_id} not found — skipping");
+            return;
+        }
+
+        $this->enrich_customer_from_billing($order);
+    }
+
+    /**
+     * PATCH platform customer placeholders from order billing fields.
+     *
+     * Lookup uses an email address (account email preferred, else billing).
+     * 404 (customer not on platform yet) is expected for some guests — debug only.
+     */
+    private function enrich_customer_from_billing(WC_Order $order): void
+    {
+        $email = '';
+
+        $customer_id = (int) $order->get_customer_id();
+        if ($customer_id > 0) {
+            $user = get_user_by('id', $customer_id);
+            if ($user) {
+                $email = trim((string) $user->user_email);
+            }
+        }
+
+        if ($email === '') {
+            $email = trim((string) $order->get_billing_email());
+        }
+
+        if ($email === '' || !is_email($email)) {
+            reloopin_loyalty_debug('orders: enrich skipped — no valid email', [
+                'order_id' => $order->get_id(),
+            ]);
+            return;
+        }
+
+        $result = $this->api->enrich_platform_customer($email, [
+            'first_name'   => (string) $order->get_billing_first_name(),
+            'last_name'    => (string) $order->get_billing_last_name(),
+            'phone_number' => (string) $order->get_billing_phone(),
+            'city'         => (string) $order->get_billing_city(),
+            'region'       => (string) $order->get_billing_state(),
+            'postal_code'  => (string) $order->get_billing_postcode(),
+            'country'      => (string) $order->get_billing_country(),
+        ]);
+
+        if (is_wp_error($result)) {
+            $data   = $result->get_error_data('loyalty_api_error');
+            $status = is_array($data) ? (int) ($data['status'] ?? 0) : 0;
+
+            if ($status === 404) {
+                reloopin_loyalty_debug('orders: enrich skipped — customer not on platform', [
+                    'order_id' => $order->get_id(),
+                    'email'    => $email,
+                ]);
+                return;
+            }
+
+            reloopin_loyalty_debug('orders: enrich failed', [
+                'order_id' => $order->get_id(),
+                'email'    => $email,
+                'error'    => $result->get_error_message(),
+            ]);
+            $this->logger->error(
+                sprintf(
+                    'Loyalty: customer enrich failed for order #%d (%s) — %s',
+                    $order->get_id(),
+                    $email,
+                    $result->get_error_message()
+                ),
+                ['source' => 'reloopin-loyalty']
+            );
+            return;
+        }
+
+        reloopin_loyalty_debug('orders: customer enriched from billing', [
+            'order_id' => $order->get_id(),
+            'email'    => $email,
+        ]);
+    }
 
     /**
      * Resolve a non-empty customer_ref for loyalty API calls.
