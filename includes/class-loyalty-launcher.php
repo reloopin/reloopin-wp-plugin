@@ -934,7 +934,6 @@ class ReLoopin_Loyalty_Launcher
           <div class="rl-guest-join-title"><?php esc_html_e('Become a member', 'reloopin-loyalty'); ?></div>
           <div class="rl-guest-join-sub"><?php esc_html_e('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'); ?></div>
           <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>" class="rl-btn-join-main"><?php esc_html_e('Join now', 'reloopin-loyalty'); ?></a>
-          <div class="rl-guest-signin-link"><?php esc_html_e('Already have an account?', 'reloopin-loyalty'); ?> <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>"><?php esc_html_e('Sign in', 'reloopin-loyalty'); ?></a></div>
         </div>
 
         <div class="rl-guest-divider"></div>
