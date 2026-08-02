@@ -317,7 +317,7 @@ function reloopin_loyalty_get_settings()
         ],
         [
             'title'   => __('Program icon', 'reloopin-loyalty'),
-            'desc'    => __('Icon shown next to the program name in the guest hero. Choose a preset or leave as default.', 'reloopin-loyalty'),
+            'desc'    => __('Icon shown on the floating guest launcher button (and next to the program name in the guest hero).', 'reloopin-loyalty'),
             'id'      => 'reloopin_launcher_program_icon',
             'type'    => 'select',
             'default' => 'layers',
