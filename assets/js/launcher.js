@@ -17,6 +17,10 @@
   /* global reloopinLauncher */
   if (typeof reloopinLauncher === 'undefined') return;
 
+  var theme   = reloopinLauncher.theme || {};
+  var primary = theme.primary || '#6054D0';
+  var accent  = theme.accent  || '#A855F7';
+
   // ── i18n helper ─────────────────────────────────────────────────────────
   var i18n = reloopinLauncher.i18n || {};
   function t(key, replacements) {
@@ -302,9 +306,9 @@
 
   var STROKE_COLORS = {
     grn: '#059669',
-    pur: '#6054D0',
+    pur: primary,
     amb: '#D97706',
-    fuch: '#A855F7'
+    fuch: accent
   };
 
   function fetchEarnStatus(onDone) {
@@ -429,7 +433,7 @@
       html += '<div class="rl-group"' + (alreadyDone.length > 0 ? ' style="margin-top:.85rem"' : '') + '><span>' + esc(t('ready_to_earn')) + '</span><span class="rl-group-line"></span></div>';
       readyToEarn.forEach(function (rule) {
         var cfg         = EVENT_TYPE_CONFIG[rule.event_type] || EVENT_TYPE_CONFIG.other;
-        var strokeColor = STROKE_COLORS[cfg.color] || '#6054D0';
+        var strokeColor = STROKE_COLORS[cfg.color] || primary;
         var iconSvg     = (SVG_ICONS[cfg.icon] || SVG_ICONS.star).replace(/stroke="currentColor"/g, 'stroke="' + strokeColor + '"');
         var clickAttr   = '';
         if (rule.event_type === 'birthday') clickAttr = ' style="cursor:pointer" data-action="birthday"';
@@ -537,7 +541,7 @@
       }
 
       html += '<div class="rl-redeem ' + stateClass + '" data-campaign-id="' + esc(String(camp.id)) + '">'
-        + '<div class="rl-icon ri-fuch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>'
+        + '<div class="rl-icon ri-fuch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="' + accent + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>'
         + '<div class="rl-redeem-body">'
         + '<div class="rl-redeem-title">' + esc(camp.name) + '</div>'
         + (camp.description ? '<div class="rl-redeem-sub">' + esc(camp.description) + '</div>' : '')
@@ -615,7 +619,7 @@
         + '<div class="rl-coupon-box">'
         + '<span class="rl-coupon-code">' + esc(coupon.code) + '</span>'
         + '<button type="button" class="rl-coupon-copy-btn" data-code="' + esc(coupon.code) + '">'
-        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="' + primary + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
         + '<span class="rl-coupon-copy-label">' + esc(t('copy_code')) + '</span>'
         + '</button>'
         + '</div>'
@@ -709,7 +713,7 @@
       + '<div class="rl-coupon-box">'
       + '<span class="rl-coupon-code">' + esc(data.code) + '</span>'
       + '<button type="button" class="rl-coupon-copy-btn">'
-      + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+      + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="' + primary + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
       + '<span class="rl-coupon-copy-label">' + esc(t('copy_code')) + '</span>'
       + '</button>'
       + '</div>'
@@ -782,11 +786,11 @@
     items.forEach(function (item) {
       if (mode === 'earn') {
         var cfg = EVENT_TYPE_CONFIG[item.event_type] || EVENT_TYPE_CONFIG.other;
-        var strokeColor = STROKE_COLORS[cfg.color] || '#6054D0';
+        var strokeColor = STROKE_COLORS[cfg.color] || primary;
         var bgColor = cfg.color === 'grn' ? '#ECFDF5'
           : cfg.color === 'amb' ? '#FFFBEB'
-          : cfg.color === 'fuch' ? '#F5F0FF'
-          : '#EDE9FF';
+          : cfg.color === 'fuch' ? ('color-mix(in srgb, ' + accent + ' 10%, white)')
+          : ('color-mix(in srgb, ' + primary + ' 12%, white)');
         var iconSvg = (SVG_ICONS[cfg.icon] || SVG_ICONS.star)
           .replace(/width="14"/g, 'width="11"')
           .replace(/height="14"/g, 'height="11"')
@@ -810,12 +814,12 @@
         // Redeem (campaigns)
         var discount = formatDiscount(item.discount_type, item.discount_value);
         html += '<div class="rl-accord-row">'
-          + '<div class="rl-accord-row-icon" style="background:#F5F0FF">'
-          + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
+          + '<div class="rl-accord-row-icon" style="background:color-mix(in srgb, ' + accent + ' 10%, white)">'
+          + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="' + accent + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
           + '</div>'
           + '<div class="rl-accord-row-body"><div class="rl-accord-row-title">' + esc(item.name) + '</div>'
           + (item.description ? '<div class="rl-accord-row-sub">' + esc(item.description) + '</div>' : '') + '</div>'
-          + '<div class="rl-accord-row-pts" style="color:#A855F7">' + esc(Number(item.points_cost || 0).toLocaleString()) + ' pts</div>'
+          + '<div class="rl-accord-row-pts" style="color:' + accent + '">' + esc(Number(item.points_cost || 0).toLocaleString()) + ' pts</div>'
           + '</div>';
       }
     });
@@ -897,12 +901,12 @@
 
   var TX_ICONS = {
     earn:    { cls: 'tx-earn',   color: '#059669', icon: 'cart' },
-    redeem:  { cls: 'tx-redeem', color: '#A855F7', icon: 'heart' },
+    redeem:  { cls: 'tx-redeem', color: accent,    icon: 'heart' },
     bonus:   { cls: 'tx-bonus',  color: '#D97706', icon: 'star' },
     expire:  { cls: 'tx-expire', color: '#DC2626', icon: 'tag' },
     void:    { cls: 'tx-expire', color: '#DC2626', icon: 'tag' },
     adjust:  { cls: 'tx-tier',   color: '#D97706', icon: 'star' },
-    default: { cls: 'tx-ref',    color: '#6054D0', icon: 'star' }
+    default: { cls: 'tx-ref',    color: primary,   icon: 'star' }
   };
 
   function renderHistoryList(results) {

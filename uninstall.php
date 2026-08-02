@@ -17,6 +17,11 @@ delete_option('reloopin_loyalty_merchant_code');
 delete_option('reloopin_launcher_enabled');
 delete_option('reloopin_launcher_position');
 delete_option('reloopin_launcher_branding');
+delete_option('reloopin_launcher_program_name');
+delete_option('reloopin_launcher_program_icon');
+delete_option('reloopin_launcher_primary_color');
+delete_option('reloopin_launcher_accent_color');
+delete_option('reloopin_launcher_font');
 
 // Delete WooCommerce section-title marker options
 delete_option('reloopin_loyalty_section_title');
