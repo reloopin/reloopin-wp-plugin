@@ -286,7 +286,12 @@ class ReLoopin_Loyalty_Launcher
 
         $base = RELOOPIN_LOYALTY_PLUGIN_URL;
 
-        $font_url = str_replace(',', '%2C', 'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        $theme   = $this->get_theme_settings();
+        $primary = $theme['primary'];
+        $accent  = $theme['accent'];
+        $font    = $theme['font_name'];
+
+        $font_url = $this->build_google_font_url($theme['font_slug']);
         wp_enqueue_style('reloopin-google-fonts', $font_url, [], RELOOPIN_LOYALTY_VERSION);
 
         wp_enqueue_style(
@@ -294,6 +299,12 @@ class ReLoopin_Loyalty_Launcher
             $base . 'assets/css/launcher.css',
             ['reloopin-google-fonts'],
             RELOOPIN_LOYALTY_VERSION
+        );
+
+        $font_stack = "'" . esc_attr($font) . "', sans-serif";
+        wp_add_inline_style(
+            'reloopin-launcher',
+            '#rl-root{--rl-primary:' . esc_attr($primary) . ';--rl-accent:' . esc_attr($accent) . ';--rl-font:' . $font_stack . ';}'
         );
 
         wp_enqueue_script(
@@ -328,6 +339,10 @@ class ReLoopin_Loyalty_Launcher
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
             'preloaded_data'  => $preloaded,
+            'theme'           => [
+                'primary' => $primary,
+                'accent'  => $accent,
+            ],
             'i18n'            => [
                 /* translators: %s: customer first name */
                 'welcome_back'       => __('Welcome back, %s!', 'reloopin-loyalty'),
@@ -371,6 +386,51 @@ class ReLoopin_Loyalty_Launcher
                 'no_redeem_options'  => __('No redeem options available yet.', 'reloopin-loyalty'),
             ],
         ]);
+    }
+
+    /**
+     * Resolve sanitized primary/accent/font theme settings.
+     *
+     * @return array{primary: string, accent: string, font_slug: string, font_name: string}
+     */
+    private function get_theme_settings(): array
+    {
+        $fonts     = function_exists('reloopin_loyalty_get_font_choices') ? reloopin_loyalty_get_font_choices() : [];
+        $font_slug = function_exists('reloopin_loyalty_sanitize_font')
+            ? reloopin_loyalty_sanitize_font(get_option('reloopin_launcher_font', 'plus-jakarta-sans'))
+            : 'plus-jakarta-sans';
+
+        $primary = function_exists('reloopin_loyalty_sanitize_hex_color')
+            ? reloopin_loyalty_sanitize_hex_color(get_option('reloopin_launcher_primary_color', '#6054D0'), '#6054D0')
+            : '#6054D0';
+        $accent = function_exists('reloopin_loyalty_sanitize_hex_color')
+            ? reloopin_loyalty_sanitize_hex_color(get_option('reloopin_launcher_accent_color', '#A855F7'), '#A855F7')
+            : '#A855F7';
+
+        return [
+            'primary'   => $primary,
+            'accent'    => $accent,
+            'font_slug' => $font_slug,
+            'font_name' => $fonts[$font_slug] ?? 'Plus Jakarta Sans',
+        ];
+    }
+
+    /**
+     * Build a Google Fonts CSS2 URL for a single curated font family.
+     */
+    private function build_google_font_url(string $font_slug): string
+    {
+        $fonts = function_exists('reloopin_loyalty_get_font_choices') ? reloopin_loyalty_get_font_choices() : [];
+        $name  = $fonts[$font_slug] ?? 'Plus Jakarta Sans';
+        $family = str_replace(' ', '+', $name);
+
+        if ($font_slug === 'instrument-serif') {
+            $query = 'family=' . $family . ':ital@0;1&display=swap';
+        } else {
+            $query = 'family=' . $family . ':wght@300;400;500;600;700&display=swap';
+        }
+
+        return 'https://fonts.googleapis.com/css2?' . $query;
     }
 
     // -----------------------------------------------------------------------
@@ -774,16 +834,28 @@ class ReLoopin_Loyalty_Launcher
         $program_name  = get_option('reloopin_launcher_program_name', '') ?: get_bloginfo('name');
         $program_icon  = get_option('reloopin_launcher_program_icon', 'layers');
         $pos_class     = 'rl-position-' . $position;
+        $theme         = $this->get_theme_settings();
+        $primary       = esc_attr($theme['primary']);
+        $accent        = esc_attr($theme['accent']);
 
         $hero_icons = [
-            'layers' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
-            'star'   => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-            'heart'  => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
-            'gem'    => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>',
-            'gift'   => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
-            'crown'  => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20V9l4 3 4-7 4 7 4-3v11"/></svg>',
+            'layers' => '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
+            'star'   => '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+            'heart'  => '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+            'gem'    => '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/>',
+            'gift'   => '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
+            'crown'  => '<path d="M2 20h20"/><path d="M4 20V9l4 3 4-7 4 7 4-3v11"/>',
         ];
-        $hero_icon_svg = $hero_icons[$program_icon] ?? $hero_icons['layers'];
+        $icon_paths = $hero_icons[$program_icon] ?? $hero_icons['layers'];
+
+        $hero_icon_svg = sprintf(
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">%s</svg>',
+            $icon_paths
+        );
+        $launcher_icon_svg = sprintf(
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">%s</svg>',
+            $icon_paths
+        );
         ?>
 
 <div id="rl-root" class="<?php echo esc_attr($pos_class); ?>">
@@ -934,7 +1006,6 @@ class ReLoopin_Loyalty_Launcher
           <div class="rl-guest-join-title"><?php esc_html_e('Become a member', 'reloopin-loyalty'); ?></div>
           <div class="rl-guest-join-sub"><?php esc_html_e('Join free and start earning points on every order. Unlock VIP tiers and redeem for real discounts.', 'reloopin-loyalty'); ?></div>
           <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>" class="rl-btn-join-main"><?php esc_html_e('Join now', 'reloopin-loyalty'); ?></a>
-          <div class="rl-guest-signin-link"><?php esc_html_e('Already have an account?', 'reloopin-loyalty'); ?> <a href="<?php echo esc_url(function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink())); ?>"><?php esc_html_e('Sign in', 'reloopin-loyalty'); ?></a></div>
         </div>
 
         <div class="rl-guest-divider"></div>
@@ -942,7 +1013,7 @@ class ReLoopin_Loyalty_Launcher
         <!-- Points section -->
         <div class="rl-guest-section">
           <div class="rl-guest-section-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="<?php echo $primary; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <?php esc_html_e('Points', 'reloopin-loyalty'); ?>
           </div>
           <div class="rl-guest-section-sub"><?php esc_html_e('Earn more Points for different actions, and turn those Points into awesome rewards!', 'reloopin-loyalty'); ?></div>
@@ -964,8 +1035,8 @@ class ReLoopin_Loyalty_Launcher
           <!-- Ways to redeem accordion -->
           <div class="rl-accord-item" id="rl-guest-redeem-accord">
             <div class="rl-accord-head">
-              <div class="rl-accord-icon" style="background:#F5F0FF">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              <div class="rl-accord-icon" style="background:color-mix(in srgb, <?php echo $accent; ?> 10%, white)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="<?php echo $accent; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               </div>
               <span class="rl-accord-label"><?php esc_html_e('Ways to redeem', 'reloopin-loyalty'); ?></span>
               <svg class="rl-accord-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B96B0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -989,7 +1060,7 @@ class ReLoopin_Loyalty_Launcher
 
     <!-- Guest launcher — icon only -->
     <button type="button" class="rl-launcher-icon" id="rl-launcher-guest" aria-label="<?php esc_attr_e('Earn rewards', 'reloopin-loyalty'); ?>">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <?php echo $launcher_icon_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG from allowed list ?>
     </button>
 
   </div><!-- /rl-guest -->
@@ -999,8 +1070,8 @@ class ReLoopin_Loyalty_Launcher
   <div class="rl-modal" id="rl-bday-modal">
     <div class="rl-modal-box">
       <div class="rl-modal-head">
-        <div class="rl-modal-icon" style="background:#F5F0FF">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo $accent; ?> 10%, white)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo $accent; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <button type="button" class="rl-modal-close" id="rl-bday-close">&#x2715;</button>
       </div>
@@ -1037,8 +1108,8 @@ class ReLoopin_Loyalty_Launcher
   <div class="rl-modal" id="rl-ref-modal">
     <div class="rl-modal-box">
       <div class="rl-modal-head">
-        <div class="rl-modal-icon" style="background:#EDE9FF">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6054D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo $primary; ?> 12%, white)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo $primary; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
         <button type="button" class="rl-modal-close" id="rl-ref-close">&#x2715;</button>
       </div>

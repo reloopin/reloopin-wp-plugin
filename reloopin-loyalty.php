@@ -104,6 +104,46 @@ function reloopin_loyalty_admin_menu()
     );
 }
 
+/**
+ * Curated Google Font families available for the launcher widget.
+ *
+ * @return array<string, string> Slug => display name.
+ */
+function reloopin_loyalty_get_font_choices(): array
+{
+    return [
+        'plus-jakarta-sans' => 'Plus Jakarta Sans',
+        'instrument-serif'  => 'Instrument Serif',
+        'inter'             => 'Inter',
+        'poppins'           => 'Poppins',
+        'roboto'            => 'Roboto',
+        'open-sans'         => 'Open Sans',
+        'lato'              => 'Lato',
+        'montserrat'        => 'Montserrat',
+        'nunito'            => 'Nunito',
+        'dm-sans'           => 'DM Sans',
+    ];
+}
+
+/**
+ * Sanitize a hex color option; fall back to $default when invalid.
+ */
+function reloopin_loyalty_sanitize_hex_color($value, string $default = '#6054D0'): string
+{
+    $sanitized = sanitize_hex_color(is_string($value) ? $value : '');
+    return $sanitized ?: $default;
+}
+
+/**
+ * Sanitize a font slug against the curated allowlist.
+ */
+function reloopin_loyalty_sanitize_font($value): string
+{
+    $choices = reloopin_loyalty_get_font_choices();
+    $slug    = is_string($value) ? $value : '';
+    return isset($choices[$slug]) ? $slug : 'plus-jakarta-sans';
+}
+
 add_action('admin_init', 'reloopin_loyalty_register_settings');
 function reloopin_loyalty_register_settings()
 {
@@ -113,7 +153,18 @@ function reloopin_loyalty_register_settings()
         if (!isset($field['id']) || $field['type'] === 'title' || $field['type'] === 'sectionend') {
             continue;
         }
-        register_setting('reloopin_loyalty_settings', $field['id']);
+
+        $args = [];
+        if ($field['type'] === 'color') {
+            $default = $field['default'] ?? '#6054D0';
+            $args['sanitize_callback'] = static function ($value) use ($default) {
+                return reloopin_loyalty_sanitize_hex_color($value, $default);
+            };
+        } elseif (($field['id'] ?? '') === 'reloopin_launcher_font') {
+            $args['sanitize_callback'] = 'reloopin_loyalty_sanitize_font';
+        }
+
+        register_setting('reloopin_loyalty_settings', $field['id'], $args);
     }
 }
 
@@ -150,8 +201,13 @@ function reloopin_loyalty_settings_page()
                 <?php continue;
                 endif;
 
-                $value   = get_option($field['id'], $field['default'] ?? '');
+                $value    = get_option($field['id'], $field['default'] ?? '');
                 $field_id = esc_attr($field['id']);
+
+                if ($field['type'] === 'color') {
+                    $default = $field['default'] ?? '#6054D0';
+                    $value   = reloopin_loyalty_sanitize_hex_color($value, $default);
+                }
                 ?>
                 <tr>
                     <th scope="row"><label for="<?php echo $field_id; ?>"><?php echo esc_html($field['title']); ?></label></th>
@@ -160,6 +216,8 @@ function reloopin_loyalty_settings_page()
                             <input type="text" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
                         <?php elseif ($field['type'] === 'password') : ?>
                             <input type="password" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+                        <?php elseif ($field['type'] === 'color') : ?>
+                            <input type="color" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" />
                         <?php elseif ($field['type'] === 'checkbox') : ?>
                             <label>
                                 <input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="yes" <?php checked($value, 'yes'); ?> />
@@ -259,7 +317,7 @@ function reloopin_loyalty_get_settings()
         ],
         [
             'title'   => __('Program icon', 'reloopin-loyalty'),
-            'desc'    => __('Icon shown next to the program name in the guest hero. Choose a preset or leave as default.', 'reloopin-loyalty'),
+            'desc'    => __('Icon shown on the floating guest launcher button (and next to the program name in the guest hero).', 'reloopin-loyalty'),
             'id'      => 'reloopin_launcher_program_icon',
             'type'    => 'select',
             'default' => 'layers',
@@ -271,6 +329,31 @@ function reloopin_loyalty_get_settings()
                 'gift'   => __('Gift', 'reloopin-loyalty'),
                 'crown'  => __('Crown', 'reloopin-loyalty'),
             ],
+        ],
+        [
+            'title'   => __('Primary color', 'reloopin-loyalty'),
+            'desc'    => __('Main brand color for the launcher panel (tabs, links, accents). Does not change the floating button.', 'reloopin-loyalty'),
+            'id'      => 'reloopin_launcher_primary_color',
+            'type'    => 'color',
+            'default' => '#6054D0',
+        ],
+        [
+            'title'   => __('Accent color', 'reloopin-loyalty'),
+            'desc'    => __('Secondary brand color used in gradients, badges, and redeem actions.', 'reloopin-loyalty'),
+            'id'      => 'reloopin_launcher_accent_color',
+            'type'    => 'color',
+            'default' => '#A855F7',
+        ],
+        [
+            'title'   => __('Font', 'reloopin-loyalty'),
+            'desc'    => __('Font used throughout the launcher widget.', 'reloopin-loyalty'),
+            'id'      => 'reloopin_launcher_font',
+            'type'    => 'select',
+            'default' => 'plus-jakarta-sans',
+            'options' => array_map(
+                static fn(string $name): string => $name,
+                reloopin_loyalty_get_font_choices()
+            ),
         ],
         [
             'type' => 'sectionend',

@@ -89,6 +89,60 @@ class ReLoopin_Loyalty_API
     }
 
     /**
+     * Fill placeholder customer fields (N/A / empty) from billing data.
+     *
+     * Merchant is derived from the API key. Backend only overwrites placeholders.
+     *
+     * @param array{
+     *   first_name?: string,
+     *   last_name?: string,
+     *   phone_number?: string,
+     *   city?: string,
+     *   region?: string,
+     *   postal_code?: string,
+     *   country?: string
+     * } $fields
+     */
+    public function enrich_platform_customer(string $email, array $fields = []): array|WP_Error
+    {
+        $email = trim($email);
+        if ($email === '') {
+            return new WP_Error('loyalty_missing_email', 'Customer email is required to enrich platform customer.');
+        }
+
+        $body = ['email' => $email];
+
+        $optional = [
+            'first_name',
+            'last_name',
+            'phone_number',
+            'city',
+            'region',
+            'postal_code',
+            'country',
+        ];
+
+        foreach ($optional as $key) {
+            $value = trim((string) ($fields[$key] ?? ''));
+            if ($value !== '') {
+                $body[$key] = $value;
+            }
+        }
+
+        // Nothing useful beyond email — skip the round-trip.
+        if (count($body) === 1) {
+            reloopin_loyalty_debug('enrich_platform_customer → skipped (no fillable fields)', [
+                'email' => $email,
+            ]);
+            return [];
+        }
+
+        reloopin_loyalty_debug('enrich_platform_customer → request body', $body);
+
+        return $this->patch('/api/v1/external/customer', $body, $this->api_headers());
+    }
+
+    /**
      * Get a customer's current points balance and tier.
      *
      * Response: available_points, lifetime_points, redeemed_points, expired_points, tier, updated_at
@@ -304,6 +358,25 @@ class ReLoopin_Loyalty_API
         ]);
 
         return $this->parse_response($response, 'POST', $endpoint);
+    }
+
+    private function patch(string $endpoint, array $body, array $headers = []): array|WP_Error
+    {
+        if (empty($this->base_url)) {
+            reloopin_loyalty_debug('PATCH aborted — API URL not configured', $endpoint);
+            return new WP_Error('loyalty_no_url', 'Loyalty API URL is not configured.');
+        }
+
+        reloopin_loyalty_debug("PATCH {$this->base_url}{$endpoint}");
+
+        $response = wp_remote_request($this->base_url . $endpoint, [
+            'method'  => 'PATCH',
+            'headers' => $headers ?: $this->api_headers(),
+            'body'    => wp_json_encode($body),
+            'timeout' => 10,
+        ]);
+
+        return $this->parse_response($response, 'PATCH', $endpoint);
     }
 
     /** All documented endpoints authenticate via reloopin_api_key; merchant is derived from the key. */
