@@ -3,7 +3,7 @@ Contributors: reloopin
 Tags: woocommerce, loyalty, rewards, points, referral
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.0.0
+Stable tag: 1.3.1
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -19,6 +19,7 @@ Connect your WooCommerce store to the reLoopin loyalty backend. Customers earn p
 * Customers earn points automatically on every completed order.
 * Bonus points for special events: first orders, featured-product purchases, coupon campaigns, and free-shipping orders.
 * Floating launcher widget — a clean, animated panel that shows each customer their balance, tier progress, earn rules, and transaction history without leaving your store.
+* Points estimate badge — a Gutenberg block (and shortcode) you can place anywhere in the theme editor to show logged-in shoppers how many points a product purchase would earn. Updates live when quantity or variation changes.
 * Tier system — display Bronze / Silver / Gold (or your custom tiers) with progress bars so shoppers always know what they're working towards.
 * Referral links — customers share a unique URL and both parties earn points when the friend completes their first order.
 * Points history tab with pagination and filter by earn / redeem entry type.
@@ -61,6 +62,10 @@ Yes — order and customer data (email address, order total, order ID, billing p
 
 Yes. The branding footer is disabled by default and can be toggled under **WooCommerce > Settings > Loyalty > Launcher Widget**.
 
+= How do I show estimated points on a product page? =
+
+Add the **Points Estimate** block in the theme editor (Appearance → Editor), or use the shortcode `[reloopin_points_estimate]`. Optionally pass `product_id="123"`. The badge is shown only to logged-in customers and updates when quantity or variation changes.
+
 = Which PHP version is required? =
 
 PHP 8.0 or later.
@@ -74,6 +79,12 @@ PHP 8.0 or later.
 5. The WooCommerce Loyalty settings page.
 
 == Changelog ==
+
+= 1.3.1 =
+* Points Estimate now supports variable products: the badge follows the selected variation and stays hidden until one is chosen.
+
+= 1.3.0 =
+* Added Points Estimate block and shortcode for product purchase point previews (logged-in customers).
 
 = 1.0.0 =
 * Initial release.

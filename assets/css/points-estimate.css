@@ -1,0 +1,19 @@
+/* reLoopin Loyalty — Points Estimate badge */
+
+.reloopin-points-estimate {
+  display: inline-block;
+  margin: 0.5rem 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--rl-primary, inherit);
+}
+
+.reloopin-points-estimate.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.reloopin-points-estimate[hidden] {
+  display: none;
+}
