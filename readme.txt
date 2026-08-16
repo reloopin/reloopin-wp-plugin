@@ -3,7 +3,7 @@ Contributors: reloopin
 Tags: woocommerce, loyalty, rewards, points, referral
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -79,6 +79,9 @@ PHP 8.0 or later.
 5. The WooCommerce Loyalty settings page.
 
 == Changelog ==
+
+= 1.3.2 =
+* Restyled the Points Estimate badge as a rounded banner using the launcher primary color for text and border (no icon).
 
 = 1.3.1 =
 * Points Estimate now supports variable products: the badge follows the selected variation and stays hidden until one is chosen.

@@ -1,12 +1,16 @@
-/* reLoopin Loyalty — Points Estimate badge */
+/* reLoopin Loyalty — Points Estimate banner */
 
 .reloopin-points-estimate {
   display: inline-block;
   margin: 0.5rem 0;
+  padding: 0.55rem 0.9rem;
   font-size: 0.95em;
   font-weight: 600;
   line-height: 1.4;
-  color: var(--rl-primary, inherit);
+  color: var(--rl-primary, #6054d0);
+  background: color-mix(in srgb, var(--rl-primary, #6054d0) 10%, white);
+  border: 1px solid var(--rl-primary, #6054d0);
+  border-radius: 10px;
 }
 
 .reloopin-points-estimate.is-loading {

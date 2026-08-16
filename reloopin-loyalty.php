@@ -3,7 +3,7 @@
  * Plugin Name: reLoopin Loyalty
  * Plugin URI:  https://reloopin.com
  * Description: Integrates a custom loyalty points backend with WooCommerce.
- * Version:     1.3.1
+ * Version:     1.3.2
  * Author:      reLoopin
  * Requires at least: 6.0
  * Requires PHP: 8.0
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RELOOPIN_LOYALTY_VERSION', '1.3.1');
+define('RELOOPIN_LOYALTY_VERSION', '1.3.2');
 define('RELOOPIN_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RELOOPIN_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 

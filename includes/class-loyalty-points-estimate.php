@@ -356,7 +356,7 @@ class ReLoopin_Loyalty_Points_Estimate
     {
         return sprintf(
             /* translators: %s: number of points */
-            __('Earn %s points', 'reloopin-loyalty'),
+            __('Earn %s points on this purchase', 'reloopin-loyalty'),
             number_format_i18n($points)
         );
     }
@@ -388,6 +388,15 @@ class ReLoopin_Loyalty_Points_Estimate
             RELOOPIN_LOYALTY_PLUGIN_URL . 'assets/css/points-estimate.css',
             [],
             RELOOPIN_LOYALTY_VERSION
+        );
+
+        $primary = function_exists('reloopin_loyalty_sanitize_hex_color')
+            ? reloopin_loyalty_sanitize_hex_color(get_option('reloopin_launcher_primary_color', '#6054D0'), '#6054D0')
+            : '#6054D0';
+
+        wp_add_inline_style(
+            'reloopin-points-estimate',
+            '.reloopin-points-estimate{--rl-primary:' . esc_attr($primary) . ';}'
         );
 
         wp_enqueue_script(

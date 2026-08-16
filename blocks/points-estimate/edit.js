@@ -41,13 +41,8 @@
           'div',
           {
             className: 'reloopin-points-estimate reloopin-points-estimate--editor',
-            style: {
-              padding: '0.5rem 0',
-              fontWeight: '600',
-              opacity: 0.85,
-            },
           },
-          __('Earn — points', 'reloopin-loyalty'),
+          __('Earn — points on this purchase', 'reloopin-loyalty'),
           productId > 0
             ? el(
                 'span',
