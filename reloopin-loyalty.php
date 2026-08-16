@@ -3,7 +3,7 @@
  * Plugin Name: reLoopin Loyalty
  * Plugin URI:  https://reloopin.com
  * Description: Integrates a custom loyalty points backend with WooCommerce.
- * Version:     1.2.0
+ * Version:     1.3.2
  * Author:      reLoopin
  * Requires at least: 6.0
  * Requires PHP: 8.0
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RELOOPIN_LOYALTY_VERSION', '1.2.0');
+define('RELOOPIN_LOYALTY_VERSION', '1.3.2');
 define('RELOOPIN_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RELOOPIN_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -78,12 +78,14 @@ function reloopin_loyalty_init()
     require_once RELOOPIN_LOYALTY_PLUGIN_DIR . 'includes/class-loyalty-orders.php';
     require_once RELOOPIN_LOYALTY_PLUGIN_DIR . 'includes/class-loyalty-launcher.php';
     require_once RELOOPIN_LOYALTY_PLUGIN_DIR . 'includes/class-loyalty-customers.php';
+    require_once RELOOPIN_LOYALTY_PLUGIN_DIR . 'includes/class-loyalty-points-estimate.php';
 
     $api = new ReLoopin_Loyalty_API();
 
     new ReLoopin_Loyalty_Orders($api);
     new ReLoopin_Loyalty_Launcher($api);
     new ReLoopin_Loyalty_Customers($api);
+    new ReLoopin_Loyalty_Points_Estimate($api);
 }
 
 // ---------------------------------------------------------------------------

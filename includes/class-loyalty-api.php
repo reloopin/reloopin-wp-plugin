@@ -215,6 +215,29 @@ class ReLoopin_Loyalty_API
     }
 
     /**
+     * Estimate points a purchase would earn (read-only; no ledger change).
+     *
+     * @param string $customer_ref Customer email or phone.
+     * @param string $amount       Line total (product) or order subtotal (cart), decimal string.
+     * @param string $event_type   product_purchase, featured_product_purchase, or first_order.
+     */
+    public function estimate_points(
+        string $customer_ref,
+        string $amount,
+        string $event_type = 'product_purchase'
+    ): array|WP_Error {
+        $params = [
+            'customer_ref' => $customer_ref,
+            'amount'       => $amount,
+            'event_type'   => $event_type,
+        ];
+
+        reloopin_loyalty_debug('estimate_points → request', $params);
+
+        return $this->get('/api/v1/external/points/estimate', $params);
+    }
+
+    /**
      * Get eligible campaigns for a customer.
      *
      * @param string $customer_ref Customer email address.

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "reloopin/points-estimate",
+  "title": "Points Estimate",
+  "category": "woocommerce",
+  "icon": "awards",
+  "description": "Shows logged-in shoppers how many loyalty points a product purchase would earn.",
+  "keywords": ["loyalty", "points", "reloopin", "rewards"],
+  "textdomain": "reloopin-loyalty",
+  "attributes": {
+    "productId": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "supports": {
+    "html": false,
+    "align": true
+  }
+}
