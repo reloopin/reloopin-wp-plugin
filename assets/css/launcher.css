@@ -86,6 +86,9 @@
   font-size: .75rem !important;
   margin-left: 2px !important;
 }
+#rl-root .rl-pts-text::before {
+  content: '\00b7\00a0' !important;
+}
 #rl-root .rl-pts-text strong {
   color: #fff !important;
   font-weight: 700 !important;
@@ -1401,11 +1404,12 @@
 /* ── RESPONSIVE ── */
 @media (max-width: 600px) {
   #rl-root {
-    right: 1rem !important;
-    bottom: 1rem !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    bottom: max(1rem, env(safe-area-inset-bottom)) !important;
   }
   #rl-root.rl-position-bottom-left {
-    left: 1rem !important;
+    left: max(1rem, env(safe-area-inset-left)) !important;
+    right: auto !important;
   }
   #rl-root .rl-panel {
     width: calc(100vw - 2rem) !important;
@@ -1415,5 +1419,56 @@
   #rl-root.rl-position-bottom-left .rl-panel {
     left: -1rem !important;
     right: auto !important;
+  }
+  #rl-root .rl-launcher {
+    padding: .4rem .75rem .4rem .4rem !important;
+    font-size: .75rem !important;
+    gap: .4rem !important;
+  }
+  #rl-root .rl-launcher .rl-av {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  #rl-root .rl-launcher-label {
+    display: none !important;
+  }
+  #rl-root .rl-pts-text::before {
+    content: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  #rl-root .rl-launcher {
+    width: 48px !important;
+    height: 48px !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    position: relative !important;
+    border-radius: 50% !important;
+    overflow: visible !important;
+  }
+  #rl-root .rl-launcher .rl-av {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: .75rem !important;
+  }
+  #rl-root .rl-pts-text {
+    position: absolute !important;
+    top: -4px !important;
+    right: -6px !important;
+    margin-left: 0 !important;
+    background: var(--rl-accent) !important;
+    color: #fff !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    padding: 2px 5px !important;
+    border-radius: 100px !important;
+    box-shadow: 0 1px 4px rgba(28,25,23,.25) !important;
+  }
+  #rl-root .rl-pts-text strong {
+    color: #fff !important;
+    font-weight: 700 !important;
+    font-size: 10px !important;
   }
 }

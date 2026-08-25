@@ -346,6 +346,8 @@ class ReLoopin_Loyalty_Launcher
             'i18n'            => [
                 /* translators: %s: customer first name */
                 'welcome_back'       => __('Welcome back, %s!', 'reloopin-loyalty'),
+                /* translators: %s: points balance */
+                'launcher_aria'      => __('My rewards, %s points', 'reloopin-loyalty'),
                 /* translators: %s: points amount */
                 'pts_per_dollar'     => __('%s pts per $1', 'reloopin-loyalty'),
                 'one_time_bonus'     => __('One-time bonus', 'reloopin-loyalty'),
@@ -971,10 +973,10 @@ class ReLoopin_Loyalty_Launcher
     </div>
 
     <!-- Launcher pill — logged in -->
-    <button type="button" class="rl-launcher" id="rl-launcher">
+    <button type="button" class="rl-launcher" id="rl-launcher" aria-label="<?php esc_attr_e('My rewards', 'reloopin-loyalty'); ?>">
       <div class="rl-av" id="rl-launcher-av"></div>
-      <?php esc_html_e('My rewards', 'reloopin-loyalty'); ?>
-      <span class="rl-pts-text">&middot; <strong id="rl-launcher-pts">…</strong></span>
+      <span class="rl-launcher-label"><?php esc_html_e('My rewards', 'reloopin-loyalty'); ?></span>
+      <span class="rl-pts-text"><strong id="rl-launcher-pts">…</strong></span>
     </button>
 
   </div><!-- /rl-loggedin -->

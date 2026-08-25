@@ -68,6 +68,55 @@
   var guestEarnBody  = document.getElementById('rl-guest-earn-body');
   var guestRedeemBody = document.getElementById('rl-guest-redeem-body');
 
+  // ── Signed-in launcher points (compact on small screens) ────────────────
+  // Defined before init so preloaded balance can call updateLauncherPts().
+  var compactPtsMq = window.matchMedia('(max-width: 420px)');
+  var lastLauncherPts = null;
+
+  function formatCompactPts(n) {
+    if (n >= 1000000) {
+      var m = n / 1000000;
+      return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + 'M';
+    }
+    if (n >= 1000) {
+      var k = n / 1000;
+      return (k >= 10 ? Math.round(k) : Math.round(k * 10) / 10) + 'K';
+    }
+    return String(n);
+  }
+
+  function formatLauncherPtsLabel(pts) {
+    if (compactPtsMq.matches) {
+      return formatCompactPts(pts);
+    }
+    return pts.toLocaleString() + ' pts';
+  }
+
+  function updateLauncherPts(pts, isError) {
+    var launcherPts = document.getElementById('rl-launcher-pts');
+    var launcherBtn = document.getElementById('rl-launcher');
+    if (isError) {
+      lastLauncherPts = null;
+      if (launcherPts) launcherPts.textContent = compactPtsMq.matches ? '--' : '-- pts';
+      if (launcherBtn) launcherBtn.setAttribute('aria-label', t('launcher_aria', ['--']));
+      return;
+    }
+    lastLauncherPts = pts;
+    if (launcherPts) launcherPts.textContent = formatLauncherPtsLabel(pts);
+    if (launcherBtn) launcherBtn.setAttribute('aria-label', t('launcher_aria', [pts.toLocaleString()]));
+  }
+
+  function onCompactPtsMqChange() {
+    if (lastLauncherPts !== null) {
+      updateLauncherPts(lastLauncherPts);
+    }
+  }
+  if (compactPtsMq.addEventListener) {
+    compactPtsMq.addEventListener('change', onCompactPtsMqChange);
+  } else if (compactPtsMq.addListener) {
+    compactPtsMq.addListener(onCompactPtsMqChange);
+  }
+
   // ── Init: show correct state ───────────────────────────────────────────
   if (isLoggedIn) {
     elLoggedin.style.display = '';
@@ -221,8 +270,7 @@
     var ptsNum = document.getElementById('rl-pts-num');
     if (ptsNum) ptsNum.textContent = pts.toLocaleString();
 
-    var launcherPts = document.getElementById('rl-launcher-pts');
-    if (launcherPts) launcherPts.textContent = pts.toLocaleString() + ' pts';
+    updateLauncherPts(pts);
 
     var hintPts = root.querySelector('.rl-hint-pts');
     if (hintPts) hintPts.textContent = pts.toLocaleString() + ' pts';
@@ -262,8 +310,7 @@
       // Show error indicator instead of leaving stale "..."
       var ptsNum = document.getElementById('rl-pts-num');
       if (ptsNum) ptsNum.textContent = '--';
-      var launcherPts = document.getElementById('rl-launcher-pts');
-      if (launcherPts) launcherPts.textContent = '-- pts';
+      updateLauncherPts(null, true);
       console.warn('[reLoopin] Balance fetch failed', errData);
       // Still load rules so the Earn tab works even if balance fails
       if (!rulesLoaded) fetchRules();
