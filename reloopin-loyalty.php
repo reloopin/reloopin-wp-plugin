@@ -164,6 +164,21 @@ function reloopin_loyalty_register_settings()
             };
         } elseif (($field['id'] ?? '') === 'reloopin_launcher_font') {
             $args['sanitize_callback'] = 'reloopin_loyalty_sanitize_font';
+        } elseif ($field['type'] === 'checkbox') {
+            $args['sanitize_callback'] = static function ($value) {
+                return 'yes' === $value ? 'yes' : 'no';
+            };
+        } elseif (($field['id'] ?? '') === 'reloopin_loyalty_api_url') {
+            $args['sanitize_callback'] = 'esc_url_raw';
+        } elseif ($field['type'] === 'select') {
+            $options = $field['options'] ?? [];
+            $default = $field['default'] ?? '';
+            $args['sanitize_callback'] = static function ($value) use ($options, $default) {
+                $value = is_string($value) ? $value : '';
+                return array_key_exists($value, $options) ? $value : $default;
+            };
+        } else {
+            $args['sanitize_callback'] = 'sanitize_text_field';
         }
 
         register_setting('reloopin_loyalty_settings', $field['id'], $args);
@@ -176,7 +191,8 @@ function reloopin_loyalty_settings_page()
         return;
     }
 
-    if (isset($_GET['settings-updated']) && $_GET['settings-updated']) { // phpcs:ignore WordPress.Security.NonceVerification
+    // phpcs:ignore WordPress.Security.NonceVerification
+    if (isset($_GET['settings-updated']) && sanitize_key(wp_unslash($_GET['settings-updated']))) {
         add_settings_error('reloopin_loyalty', 'settings_updated', __('Settings saved.', 'reloopin-loyalty'), 'updated');
     }
 
@@ -204,7 +220,7 @@ function reloopin_loyalty_settings_page()
                 endif;
 
                 $value    = get_option($field['id'], $field['default'] ?? '');
-                $field_id = esc_attr($field['id']);
+                $field_id = $field['id'];
 
                 if ($field['type'] === 'color') {
                     $default = $field['default'] ?? '#6054D0';
@@ -212,21 +228,21 @@ function reloopin_loyalty_settings_page()
                 }
                 ?>
                 <tr>
-                    <th scope="row"><label for="<?php echo $field_id; ?>"><?php echo esc_html($field['title']); ?></label></th>
+                    <th scope="row"><label for="<?php echo esc_attr($field_id); ?>"><?php echo esc_html($field['title']); ?></label></th>
                     <td>
                         <?php if ($field['type'] === 'text') : ?>
-                            <input type="text" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+                            <input type="text" id="<?php echo esc_attr($field_id); ?>" name="<?php echo esc_attr($field_id); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
                         <?php elseif ($field['type'] === 'password') : ?>
-                            <input type="password" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+                            <input type="password" id="<?php echo esc_attr($field_id); ?>" name="<?php echo esc_attr($field_id); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
                         <?php elseif ($field['type'] === 'color') : ?>
-                            <input type="color" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="<?php echo esc_attr($value); ?>" />
+                            <input type="color" id="<?php echo esc_attr($field_id); ?>" name="<?php echo esc_attr($field_id); ?>" value="<?php echo esc_attr($value); ?>" />
                         <?php elseif ($field['type'] === 'checkbox') : ?>
                             <label>
-                                <input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>" value="yes" <?php checked($value, 'yes'); ?> />
+                                <input type="checkbox" id="<?php echo esc_attr($field_id); ?>" name="<?php echo esc_attr($field_id); ?>" value="yes" <?php checked($value, 'yes'); ?> />
                                 <?php echo esc_html($field['desc'] ?? ''); ?>
                             </label>
                         <?php elseif ($field['type'] === 'select') : ?>
-                            <select id="<?php echo $field_id; ?>" name="<?php echo $field_id; ?>">
+                            <select id="<?php echo esc_attr($field_id); ?>" name="<?php echo esc_attr($field_id); ?>">
                                 <?php foreach (($field['options'] ?? []) as $opt_val => $opt_label) : ?>
                                     <option value="<?php echo esc_attr($opt_val); ?>" <?php selected($value, $opt_val); ?>><?php echo esc_html($opt_label); ?></option>
                                 <?php endforeach; ?>

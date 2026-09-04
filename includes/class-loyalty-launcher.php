@@ -806,8 +806,8 @@ class ReLoopin_Loyalty_Launcher
             wp_send_json_error(['message' => 'not_logged_in']);
         }
 
-        $month = isset($_POST['month']) ? (int) $_POST['month'] : 0;
-        $day   = isset($_POST['day'])   ? (int) $_POST['day']   : 0;
+        $month = isset($_POST['month']) ? absint(wp_unslash($_POST['month'])) : 0;
+        $day   = isset($_POST['day'])   ? absint(wp_unslash($_POST['day']))   : 0;
 
         if ($month < 1 || $month > 12 || $day < 1 || $day > self::MAX_DAYS_BY_MONTH[$month]) {
             wp_send_json_error(['message' => 'invalid_date']);
@@ -837,8 +837,8 @@ class ReLoopin_Loyalty_Launcher
         $program_icon  = get_option('reloopin_launcher_program_icon', 'layers');
         $pos_class     = 'rl-position-' . $position;
         $theme         = $this->get_theme_settings();
-        $primary       = esc_attr($theme['primary']);
-        $accent        = esc_attr($theme['accent']);
+        $primary       = $theme['primary'];
+        $accent        = $theme['accent'];
 
         $hero_icons = [
             'layers' => '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
@@ -1015,7 +1015,7 @@ class ReLoopin_Loyalty_Launcher
         <!-- Points section -->
         <div class="rl-guest-section">
           <div class="rl-guest-section-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="<?php echo $primary; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="<?php echo esc_attr($primary); ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <?php esc_html_e('Points', 'reloopin-loyalty'); ?>
           </div>
           <div class="rl-guest-section-sub"><?php esc_html_e('Earn more Points for different actions, and turn those Points into awesome rewards!', 'reloopin-loyalty'); ?></div>
@@ -1037,8 +1037,8 @@ class ReLoopin_Loyalty_Launcher
           <!-- Ways to redeem accordion -->
           <div class="rl-accord-item" id="rl-guest-redeem-accord">
             <div class="rl-accord-head">
-              <div class="rl-accord-icon" style="background:color-mix(in srgb, <?php echo $accent; ?> 10%, white)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="<?php echo $accent; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              <div class="rl-accord-icon" style="background:color-mix(in srgb, <?php echo esc_attr($accent); ?> 10%, white)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="<?php echo esc_attr($accent); ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               </div>
               <span class="rl-accord-label"><?php esc_html_e('Ways to redeem', 'reloopin-loyalty'); ?></span>
               <svg class="rl-accord-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B96B0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -1072,8 +1072,8 @@ class ReLoopin_Loyalty_Launcher
   <div class="rl-modal" id="rl-bday-modal">
     <div class="rl-modal-box">
       <div class="rl-modal-head">
-        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo $accent; ?> 10%, white)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo $accent; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo esc_attr($accent); ?> 10%, white)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo esc_attr($accent); ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <button type="button" class="rl-modal-close" id="rl-bday-close">&#x2715;</button>
       </div>
@@ -1110,8 +1110,8 @@ class ReLoopin_Loyalty_Launcher
   <div class="rl-modal" id="rl-ref-modal">
     <div class="rl-modal-box">
       <div class="rl-modal-head">
-        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo $primary; ?> 12%, white)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo $primary; ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <div class="rl-modal-icon" style="background:color-mix(in srgb, <?php echo esc_attr($primary); ?> 12%, white)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?php echo esc_attr($primary); ?>" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
         <button type="button" class="rl-modal-close" id="rl-ref-close">&#x2715;</button>
       </div>

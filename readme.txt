@@ -2,7 +2,7 @@
 Contributors: reloopin
 Tags: woocommerce, loyalty, rewards, points, referral
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 7.1
 Stable tag: 1.3.2
 Requires PHP: 8.0
 License: GPLv2 or later
@@ -89,10 +89,23 @@ PHP 8.0 or later.
 = 1.3.0 =
 * Added Points Estimate block and shortcode for product purchase point previews (logged-in customers).
 
+= 1.2.0 =
+* New: Standalone reLoopin admin menu (replaces WooCommerce settings tab).
+* New: Settings use WordPress native register_setting() API with per-field sanitization.
+* New: Primary and accent color pickers; font selection for launcher widget.
+
+= 1.1.0 =
+* New: Auto-sync new WooCommerce customers to the reLoopin platform.
+* New: Track reLoopin-generated coupon redemptions at checkout.
+* New: Campaigns tab, birthday bonus, rate limiting on AJAX endpoints.
+
 = 1.0.0 =
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.3.2 =
+Restyled the Points Estimate badge. Includes WordPress.org compliance fixes (sanitization, changelog continuity).
 
 = 1.0.0 =
 Initial release — no upgrade required.

@@ -199,7 +199,7 @@ class ReLoopin_Loyalty_Orders
             if ($is_reloopin !== '1') {
                 reloopin_loyalty_debug("orders: coupon {$code} is not a reLoopin coupon — skipping", [
                     'coupon_id'    => $coupon_id,
-                    'meta_value'   => $is_reloopin,
+                    'coupon_meta'  => $is_reloopin,
                 ]);
                 continue;
             }
