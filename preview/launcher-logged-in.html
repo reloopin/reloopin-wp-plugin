@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Launcher preview — logged in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/launcher.css">
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #f4f1eb;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .preview-page {
+      min-height: 100vh;
+      padding: 1.25rem 1.25rem 6rem;
+    }
+    .preview-page h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1c1917;
+      margin: 0 0 .35rem;
+    }
+    .preview-page p {
+      margin: 0;
+      color: #78716c;
+      font-size: .85rem;
+      max-width: 36rem;
+    }
+    #rl-root {
+      --rl-primary: #6054D0;
+      --rl-accent: #A855F7;
+      --rl-font: 'Plus Jakarta Sans', sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-page">
+    <h1>Logged-in launcher preview</h1>
+    <p>Hardcoded signed-in state with mock AJAX. Resize below 600px / 420px to check the compact pill and panel. Click the launcher to open the panel.</p>
+  </div>
+
+  <div id="rl-root" class="rl-position-bottom-right">
+    <div id="rl-loggedin" style="display:none">
+      <div class="rl-hint" id="rl-hint">
+        <span class="rl-hint-dot"></span>
+        You have <strong class="rl-hint-pts">…</strong> to redeem
+      </div>
+
+      <div class="rl-panel" id="rl-panel">
+        <div class="rl-head">
+          <div class="rl-head-top">
+            <div class="rl-brand">reloopin <span class="rl-gem"></span></div>
+            <button type="button" class="rl-close" id="rl-close-btn" aria-label="Close">&#x2715;</button>
+          </div>
+          <div class="rl-user">
+            <div class="rl-user-av" id="rl-user-av"></div>
+            <div>
+              <div class="rl-user-name" id="rl-user-name"></div>
+              <div class="rl-user-sub">Your rewards are waiting</div>
+            </div>
+          </div>
+          <div class="rl-pts-card">
+            <div>
+              <div class="rl-pts-num" id="rl-pts-num">…</div>
+              <div class="rl-pts-lbl">Points balance</div>
+            </div>
+            <div style="text-align:right">
+              <div class="rl-tier-badge" id="rl-tier-badge" style="display:none">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="#D97706" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span id="rl-tier-name"></span>
+              </div>
+              <div class="rl-prog-wrap" id="rl-prog-wrap" style="display:none">
+                <div class="rl-prog-track"><div class="rl-prog-fill" id="rl-prog-fill"></div></div>
+                <div class="rl-prog-lbl" id="rl-prog-lbl"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rl-tier-row" id="rl-tier-row" style="display:none">
+          <div class="rl-tier-labels">
+            <span id="rl-tier-current-label"></span>
+            <span id="rl-tier-next-label"></span>
+          </div>
+          <div class="rl-tier-track"><div class="rl-tier-fill" id="rl-tier-fill"></div></div>
+        </div>
+
+        <div class="rl-tabs">
+          <button type="button" class="rl-tab active" data-tab="earn">Earn <span class="rl-tab-badge" id="rl-earn-badge"></span></button>
+          <button type="button" class="rl-tab" data-tab="redeem">Redeem</button>
+          <button type="button" class="rl-tab" data-tab="history">History</button>
+        </div>
+
+        <div class="rl-body">
+          <div class="rl-pane active" id="rl-earn">
+            <div class="rl-state-loading" id="rl-earn-loading"><div class="rl-spinner"></div></div>
+            <div id="rl-earn-content" style="display:none"></div>
+          </div>
+          <div class="rl-pane" id="rl-redeem">
+            <div class="rl-state-loading" id="rl-redeem-loading"><div class="rl-spinner"></div></div>
+            <div id="rl-redeem-content" style="display:none"></div>
+          </div>
+          <div class="rl-pane" id="rl-history">
+            <div class="rl-hist-summary" id="rl-hist-summary">
+              <div class="rl-hs-card"><div class="rl-hs-num earn-c" id="rl-hs-earned">…</div><div class="rl-hs-lbl">Total earned</div></div>
+              <div class="rl-hs-card"><div class="rl-hs-num spend-c" id="rl-hs-redeemed">…</div><div class="rl-hs-lbl">Redeemed</div></div>
+              <div class="rl-hs-card"><div class="rl-hs-num" id="rl-hs-balance">…</div><div class="rl-hs-lbl">Balance</div></div>
+            </div>
+            <div class="rl-filter-row" id="rl-filter-row">
+              <button type="button" class="rl-filter on" data-filter="">All</button>
+              <button type="button" class="rl-filter" data-filter="earn">Earned</button>
+              <button type="button" class="rl-filter" data-filter="redeem">Redeemed</button>
+            </div>
+            <div class="rl-state-loading" id="rl-hist-loading"><div class="rl-spinner"></div></div>
+            <div id="rl-hist-list" style="display:none"></div>
+            <p class="rl-hist-empty" id="rl-hist-empty" style="display:none">No points history yet.</p>
+            <p class="rl-hist-err" id="rl-hist-err" style="display:none">Could not load history. Please try again later.</p>
+            <div class="rl-hist-pagination" id="rl-hist-pagination" style="display:none">
+              <button type="button" class="rl-hist-prev" id="rl-hist-prev" disabled>&#8592; Newer</button>
+              <span class="rl-hist-page-info" id="rl-hist-page-info"></span>
+              <button type="button" class="rl-hist-next" id="rl-hist-next">Older &#8594;</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rl-footer">
+          <span class="rl-footer-note"><span class="rl-footer-dot"></span>Powered by Reloopin</span>
+          <button type="button" class="rl-apply-btn" id="rl-apply-btn">Apply at checkout</button>
+        </div>
+      </div>
+
+      <button type="button" class="rl-launcher" id="rl-launcher" aria-label="My rewards">
+        <div class="rl-av" id="rl-launcher-av"></div>
+        <span class="rl-launcher-label">My rewards</span>
+        <span class="rl-pts-text"><strong id="rl-launcher-pts">…</strong></span>
+      </button>
+    </div>
+
+    <div id="rl-guest" style="display:none">
+      <div class="rl-panel" id="rl-panel-guest"></div>
+      <button type="button" class="rl-launcher-icon" id="rl-launcher-guest" aria-label="Earn rewards"></button>
+      <div id="rl-guest-earn-body"></div>
+      <div id="rl-guest-redeem-body"></div>
+    </div>
+
+    <div class="rl-modal" id="rl-bday-modal">
+      <div class="rl-modal-box">
+        <div class="rl-modal-head">
+          <div class="rl-modal-icon" style="background:color-mix(in srgb, #A855F7 10%, white)"></div>
+          <button type="button" class="rl-modal-close" id="rl-bday-close">&#x2715;</button>
+        </div>
+        <div class="rl-modal-title">When's your birthday?</div>
+        <div class="rl-modal-sub">We'll send you <strong>100 bonus points</strong> every year on your birthday month.</div>
+        <div class="rl-modal-field">
+          <label class="rl-field-label">Month</label>
+          <select id="rl-bday-month" class="rl-select">
+            <option value="">Select month</option>
+            <option value="6">June</option>
+          </select>
+        </div>
+        <div class="rl-modal-field">
+          <label class="rl-field-label">Day</label>
+          <input type="number" id="rl-bday-day" class="rl-input" placeholder="e.g. 14" min="1" max="31">
+        </div>
+        <div id="rl-bday-error" class="rl-modal-error">Please select a month and enter a valid day.</div>
+        <button type="button" class="rl-modal-btn" id="rl-bday-save">Save my birthday</button>
+      </div>
+    </div>
+
+    <div class="rl-modal" id="rl-ref-modal">
+      <div class="rl-modal-box">
+        <div class="rl-modal-head">
+          <button type="button" class="rl-modal-close" id="rl-ref-close">&#x2715;</button>
+        </div>
+        <div class="rl-modal-title">Refer a friend, earn 250 pts</div>
+        <div class="rl-modal-sub">Share your unique link.</div>
+        <div class="rl-ref-link-wrap">
+          <div class="rl-ref-link-box">
+            <span class="rl-ref-link-text" id="rl-ref-link-text"></span>
+            <button type="button" class="rl-ref-copy-btn" id="rl-ref-copy-btn">
+              <span id="rl-ref-copy-label">Copy</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rl-modal-backdrop" id="rl-backdrop"></div>
+  </div>
+
+  <div class="rl-toast" id="rl-toast">
+    <span id="rl-toast-text"></span>
+  </div>
+
+  <script>
+    window.reloopinLauncher = {
+      ajax_url: '/preview-ajax',
+      nonce: 'preview',
+      is_logged_in: true,
+      user_id: 42,
+      user_initials: 'YT',
+      user_first_name: 'Yogesh',
+      preloaded_data: {
+        logged_in: true,
+        user_id: 42,
+        name: 'Yogesh',
+        initials: 'YT',
+        available_points: 2450,
+        lifetime_points: 8200,
+        redeemed_points: 5000,
+        expired_points: 0,
+        tier: 'gold',
+        referral_url: 'https://example.com/?ref=42'
+      },
+      theme: { primary: '#6054D0', accent: '#A855F7' },
+      i18n: {
+        welcome_back: 'Welcome back, %s!',
+        launcher_aria: 'My rewards, %s points',
+        pts_per_dollar: '%s pts per $1',
+        one_time_bonus: 'One-time bonus',
+        x_pts: '%sx pts',
+        add_now: 'Add now',
+        get_link: 'Get link',
+        available: 'Available',
+        redeem_your_points: 'Redeem your points — %s pts',
+        unknown: 'Unknown',
+        bday_saved: 'Birthday saved!',
+        referral_copied: 'Referral link copied to clipboard!',
+        earn_error: 'Could not load earn rules.',
+        no_earn_rules: 'No earn rules available.',
+        already_earned: 'Already earned',
+        ready_to_earn: 'Ready to earn',
+        collected: 'Collected',
+        annual_bonus: 'Annual bonus active',
+        campaigns_error: 'Could not load rewards.',
+        no_campaigns: 'No rewards available yet. Keep earning points!',
+        your_coupons: 'Your coupons',
+        no_coupons: 'No active coupons. Redeem your points to get one!',
+        coupons_error: 'Could not load your coupons.',
+        min_order: 'Min order: $%s',
+        generating: 'Generating…',
+        coupon_generated: 'Coupon generated!',
+        coupon_copied: 'Coupon %s copied!',
+        coupon_error: 'Could not generate coupon. Please try again.',
+        pts_required: 'pts required',
+        copy_code: 'Copy',
+        copied: 'Copied!',
+        discount_expires: 'Expires',
+        discount_off: 'off',
+        auto_applied: 'Applied automatically at checkout',
+        no_redeem_options: 'No redeem options available yet.'
+      }
+    };
+
+    var MOCK = {
+      reloopin_launcher_session: {
+        logged_in: true,
+        nonce: 'preview',
+        user_id: 42,
+        name: 'Yogesh',
+        initials: 'YT'
+      },
+      reloopin_launcher_data: window.reloopinLauncher.preloaded_data,
+      reloopin_launcher_earn_status: { completed: ['signup'], birthday_set: false },
+      reloopin_launcher_rules: [
+        { id: 1, name: 'Sign up', description: 'Welcome bonus', rule_type: 'event', event_type: 'signup', earn_rate: 100, conditions: null },
+        { id: 2, name: 'Shop', description: 'Earn on every dollar', rule_type: 'event', event_type: 'product_purchase', earn_rate: 1, conditions: null },
+        { id: 3, name: 'Birthday', description: 'Annual gift', rule_type: 'event', event_type: 'birthday', earn_rate: 100, conditions: null },
+        { id: 4, name: 'Refer a friend', description: 'Share your link', rule_type: 'event', event_type: 'referral', earn_rate: 250, conditions: null }
+      ],
+      reloopin_launcher_campaigns: [
+        { id: 11, name: '$10 off', description: 'Cart discount', campaign_type: 'coupon', points_cost: 1000, discount_type: 'fixed', discount_value: '10' },
+        { id: 12, name: '15% off', description: 'Sitewide', campaign_type: 'coupon', points_cost: 2500, discount_type: 'percentage', discount_value: '15' }
+      ],
+      reloopin_launcher_coupons: [],
+      reloopin_launcher_history: {
+        results: [
+          { date: 'Aug 20, 2026', date_raw: '2026-08-20', entry_type: 'earn', points: 120, balance_after: 2450, notes: 'Order #1042' },
+          { date: 'Aug 12, 2026', date_raw: '2026-08-12', entry_type: 'redeem', points: -1000, balance_after: 2330, notes: '$10 off coupon' }
+        ],
+        total: 2,
+        page_size: 10,
+        page: 1
+      }
+    };
+
+    (function mockAjax() {
+      var origOpen = XMLHttpRequest.prototype.open;
+      var origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this._rlUrl = url;
+        return origOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function (body) {
+        var action = '';
+        if (body && typeof body.get === 'function') {
+          action = body.get('action') || '';
+        }
+        if (this._rlUrl === '/preview-ajax' && MOCK[action]) {
+          var payload = JSON.stringify({ success: true, data: MOCK[action] });
+          var xhr = this;
+          setTimeout(function () {
+            Object.defineProperty(xhr, 'status', { value: 200 });
+            Object.defineProperty(xhr, 'responseText', { value: payload });
+            if (typeof xhr.onload === 'function') xhr.onload();
+          }, 40);
+          return;
+        }
+        return origSend.apply(this, arguments);
+      };
+    })();
+  </script>
+  <script src="../assets/js/launcher.js"></script>
+</body>
+</html>

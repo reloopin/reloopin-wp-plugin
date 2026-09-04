@@ -21,6 +21,7 @@ class ReLoopin_Loyalty_Launcher
     private const ALLOWED_ENTRY_TYPES = ['earn', 'redeem', 'bonus', 'expire', 'void', 'adjust'];
     private const MAX_DAYS_BY_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     private const RATE_LIMIT_MAX = 30;
+    private const AUTH_COOKIE = 'reloopin_auth';
 
     private ReLoopin_Loyalty_API $api;
 
@@ -30,8 +31,12 @@ class ReLoopin_Loyalty_Launcher
 
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('wp_footer', [$this, 'render_launcher']);
+        add_action('wp_login', [$this, 'on_wp_login'], 10, 2);
+        add_action('wp_logout', [$this, 'on_wp_logout']);
 
         // AJAX endpoints
+        add_action('wp_ajax_reloopin_launcher_session', [$this, 'ajax_launcher_session']);
+        add_action('wp_ajax_nopriv_reloopin_launcher_session', [$this, 'ajax_launcher_session']);
         add_action('wp_ajax_reloopin_launcher_data', [$this, 'ajax_launcher_data']);
         add_action('wp_ajax_nopriv_reloopin_launcher_data', [$this, 'ajax_launcher_data']);
         add_action('wp_ajax_reloopin_launcher_history', [$this, 'ajax_launcher_history']);
@@ -152,6 +157,84 @@ class ReLoopin_Loyalty_Launcher
         return true;
     }
 
+    /**
+     * Readable auth flag for first paint on cached HTML.
+     * Not HttpOnly — JS may read it. Live session AJAX remains the source of truth.
+     */
+    private function set_auth_cookie(bool $logged_in): void
+    {
+        $value   = $logged_in ? '1' : '0';
+        $expires = $logged_in ? time() + YEAR_IN_SECONDS : time() - YEAR_IN_SECONDS;
+        $path    = defined('COOKIEPATH') && COOKIEPATH !== '' ? COOKIEPATH : '/';
+        $domain  = defined('COOKIE_DOMAIN') && COOKIE_DOMAIN ? COOKIE_DOMAIN : '';
+
+        setcookie(self::AUTH_COOKIE, $value, [
+            'expires'  => $expires,
+            'path'     => $path,
+            'domain'   => $domain,
+            'secure'   => is_ssl(),
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
+
+        if ($logged_in) {
+            $_COOKIE[self::AUTH_COOKIE] = '1';
+        } else {
+            unset($_COOKIE[self::AUTH_COOKIE]);
+        }
+    }
+
+    public function on_wp_login(string $user_login, $user = null): void
+    {
+        $this->set_auth_cookie(true);
+    }
+
+    public function on_wp_logout(): void
+    {
+        $this->set_auth_cookie(false);
+    }
+
+    private function launcher_nonce(): string
+    {
+        return wp_create_nonce('reloopin_launcher');
+    }
+
+    /**
+     * Live WP session payload — no loyalty API calls.
+     *
+     * @return array{logged_in: bool, nonce: string, user_id: int, name?: string, initials?: string}
+     */
+    private function session_payload(): array
+    {
+        if (!is_user_logged_in()) {
+            return [
+                'logged_in' => false,
+                'nonce'     => $this->launcher_nonce(),
+                'user_id'   => 0,
+            ];
+        }
+
+        $user = wp_get_current_user();
+        $info = $this->get_user_display_info($user);
+
+        return [
+            'logged_in' => true,
+            'nonce'     => $this->launcher_nonce(),
+            'user_id'   => (int) $user->ID,
+            'name'      => $info['first_name'],
+            'initials'  => $info['initials'],
+        ];
+    }
+
+    /**
+     * Stamp a fresh nonce onto a launcher_data payload without storing it in transients.
+     */
+    private function with_launcher_nonce(array $payload): array
+    {
+        $payload['nonce'] = $this->launcher_nonce();
+        return $payload;
+    }
+
     private function set_reloopin_meta(\WC_Coupon $coupon, array $api_data, string $code): void
     {
         $coupon->update_meta_data('_reloopin_coupon', '1');
@@ -168,6 +251,7 @@ class ReLoopin_Loyalty_Launcher
         $info = $this->get_user_display_info($user);
         return [
             'logged_in'        => true,
+            'user_id'          => (int) $user->ID,
             'name'             => $info['first_name'],
             'initials'         => $info['initials'],
             'available_points' => (int) ($data['available_points'] ?? 0),
@@ -319,11 +403,14 @@ class ReLoopin_Loyalty_Launcher
         $first_name = '';
         $preloaded  = null;
 
+        $user_id = 0;
         if (is_user_logged_in()) {
+            $this->set_auth_cookie(true);
             $user = wp_get_current_user();
             $info = $this->get_user_display_info($user);
             $initials   = $info['initials'];
             $first_name = $info['first_name'];
+            $user_id    = (int) $user->ID;
 
             // Preload balance from transient (zero API calls — cached data only).
             $cached = get_transient($this->cache_key('bal', (string) $user->ID));
@@ -336,6 +423,7 @@ class ReLoopin_Loyalty_Launcher
             'ajax_url'        => admin_url('admin-ajax.php'),
             'nonce'           => wp_create_nonce('reloopin_launcher'),
             'is_logged_in'    => is_user_logged_in(),
+            'user_id'         => $user_id,
             'user_initials'   => $initials,
             'user_first_name' => $first_name,
             'preloaded_data'  => $preloaded,
@@ -436,6 +524,19 @@ class ReLoopin_Loyalty_Launcher
     }
 
     // -----------------------------------------------------------------------
+    // AJAX: Live WP session (source of truth — no loyalty API)
+    // -----------------------------------------------------------------------
+
+    public function ajax_launcher_session(): void
+    {
+        if (!$this->check_rate_limit('launcher_session')) {
+            wp_send_json_error(['message' => 'rate_limited'], 429);
+        }
+
+        wp_send_json_success($this->session_payload());
+    }
+
+    // -----------------------------------------------------------------------
     // AJAX: Balance + user data
     // -----------------------------------------------------------------------
 
@@ -444,7 +545,7 @@ class ReLoopin_Loyalty_Launcher
         check_ajax_referer('reloopin_launcher', 'nonce');
 
         if (!is_user_logged_in()) {
-            wp_send_json_success(['logged_in' => false]);
+            wp_send_json_success($this->with_launcher_nonce(['logged_in' => false, 'user_id' => 0]));
         }
 
         if (!$this->check_rate_limit('launcher_data')) {
@@ -455,8 +556,8 @@ class ReLoopin_Loyalty_Launcher
         $cache_key = $this->cache_key('bal', (string) $user_id);
         $cached    = get_transient($cache_key);
 
-        if ($cached !== false) {
-            wp_send_json_success($cached);
+        if ($cached !== false && is_array($cached)) {
+            wp_send_json_success($this->with_launcher_nonce($cached));
         }
 
         $user         = wp_get_current_user();
@@ -471,7 +572,7 @@ class ReLoopin_Loyalty_Launcher
 
         $payload = $this->transform_balance($balance_data, $user);
         set_transient($cache_key, $payload, self::CACHE_TTL_SHORT);
-        wp_send_json_success($payload);
+        wp_send_json_success($this->with_launcher_nonce($payload));
     }
 
     // -----------------------------------------------------------------------

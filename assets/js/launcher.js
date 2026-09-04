@@ -34,7 +34,6 @@
   }
 
   // ── State ──────────────────────────────────────────────────────────────
-  var isLoggedIn   = !!reloopinLauncher.is_logged_in;
   var panelOpen    = false;
   var guestOpen    = false;
   var dataLoaded   = false;
@@ -117,26 +116,200 @@
     compactPtsMq.addListener(onCompactPtsMqChange);
   }
 
-  // ── Init: show correct state ───────────────────────────────────────────
-  if (isLoggedIn) {
-    elLoggedin.style.display = '';
-    elGuest.style.display = 'none';
-    // Set initials from localized data
+  // ── Live session (source of truth) ─────────────────────────────────────
+  var SESSION_TICK_KEY = 'reloopin_session_tick';
+  var SYNC_COOLDOWN_MS = 2000;
+
+  function readAuthCookie() {
+    var match = document.cookie.match(/(?:^|; )reloopin_auth=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function writeAuthCookie(loggedIn) {
+    try {
+      var secure = location.protocol === 'https:' ? '; Secure' : '';
+      var maxAge = loggedIn ? 31536000 : 0;
+      document.cookie = 'reloopin_auth=' + (loggedIn ? '1' : '0') + '; path=/; max-age=' + maxAge + '; SameSite=Lax' + secure;
+    } catch (e) { /* private mode */ }
+  }
+
+  var authCookie = readAuthCookie();
+  var hintLoggedIn = authCookie === '1' || (authCookie !== '0' && !!reloopinLauncher.is_logged_in);
+
+  var session = {
+    ready: false,
+    loggedIn: hintLoggedIn,
+    userId: hintLoggedIn ? Number(reloopinLauncher.user_id || 0) || null : null,
+    name: reloopinLauncher.user_first_name || '',
+    initials: reloopinLauncher.user_initials || '',
+    nonce: reloopinLauncher.nonce || ''
+  };
+  var pendingToggle = null;
+  var applyingFromStorage = false;
+  var syncInFlight = null;
+  var lastSyncAt = 0;
+  var syncTimer = null;
+  var sessionReady = null;
+
+  function resetLazyFlags() {
+    dataLoaded = false;
+    rulesLoaded = false;
+    histLoaded = false;
+    campaignsLoaded = false;
+    couponsLoaded = false;
+    earnStatusLoaded = false;
+    guestRulesLoaded = false;
+    guestCampaignsLoaded = false;
+    userData = null;
+    earnStatus = null;
+    currentRules = [];
+    campaignsData = [];
+    couponsData = [];
+  }
+
+  function applySessionIdentity() {
     var avEls = [document.getElementById('rl-user-av'), document.getElementById('rl-launcher-av')];
     avEls.forEach(function (el) {
-      if (el) el.textContent = reloopinLauncher.user_initials || '';
+      if (el) el.textContent = session.initials || '';
     });
     var nameEl = document.getElementById('rl-user-name');
-    if (nameEl) nameEl.textContent = t('welcome_back', [reloopinLauncher.user_first_name || '']);
+    if (nameEl) nameEl.textContent = t('welcome_back', [session.name || '']);
+  }
 
-    // Preload: if PHP passed cached balance data, apply it immediately
-    if (reloopinLauncher.preloaded_data && reloopinLauncher.preloaded_data.logged_in) {
-      applyUserData(reloopinLauncher.preloaded_data);
-      dataLoaded = true;
+  function maybeApplyPreloaded() {
+    var pre = reloopinLauncher.preloaded_data;
+    if (!pre || !pre.logged_in || !session.loggedIn) return;
+    var preUser = Number(pre.user_id || reloopinLauncher.user_id || 0);
+    if (preUser && session.userId && preUser !== session.userId) return;
+    applyUserData(pre);
+    dataLoaded = true;
+  }
+
+  function showLoggedIn() {
+    if (elLoggedin) elLoggedin.style.display = '';
+    if (elGuest) elGuest.style.display = 'none';
+    if (panelGuest) panelGuest.classList.remove('open');
+    guestOpen = false;
+    applySessionIdentity();
+  }
+
+  function showGuest() {
+    if (elGuest) elGuest.style.display = '';
+    if (elLoggedin) elLoggedin.style.display = 'none';
+    if (panel) panel.classList.remove('open');
+    panelOpen = false;
+  }
+
+  function broadcastSessionTick() {
+    if (applyingFromStorage) return;
+    try {
+      localStorage.setItem(SESSION_TICK_KEY, String(Date.now()));
+    } catch (e) { /* private mode */ }
+  }
+
+  function applySession(payload) {
+    payload = payload || {};
+    var wasReady = session.ready;
+    var wasLoggedIn = session.loggedIn;
+    var prevUserId = session.userId;
+    var guestWasOpen = guestOpen;
+
+    var nextLoggedIn = !!payload.logged_in;
+    var nextUserId = nextLoggedIn ? (Number(payload.user_id || 0) || null) : null;
+    var identityChanged = wasReady && (wasLoggedIn !== nextLoggedIn || prevUserId !== nextUserId);
+
+    if (payload.nonce) {
+      session.nonce = payload.nonce;
+      reloopinLauncher.nonce = payload.nonce;
     }
+
+    session.ready = true;
+    session.loggedIn = nextLoggedIn;
+    session.userId = nextUserId;
+    if (payload.name) session.name = payload.name;
+    if (payload.initials) session.initials = payload.initials;
+
+    if (identityChanged) {
+      resetLazyFlags();
+    }
+
+    if (session.loggedIn) {
+      showLoggedIn();
+      if (!dataLoaded) maybeApplyPreloaded();
+    } else {
+      showGuest();
+    }
+    writeAuthCookie(session.loggedIn);
+
+    var upgradedWithGuestOpen = !wasLoggedIn && session.loggedIn && guestWasOpen;
+    if (upgradedWithGuestOpen) {
+      pendingToggle = null;
+      if (!panelOpen) togglePanel();
+    } else if (pendingToggle) {
+      var queued = pendingToggle;
+      pendingToggle = null;
+      requestToggle(queued);
+    }
+
+    if (identityChanged) {
+      broadcastSessionTick();
+    }
+  }
+
+  function syncSession(force) {
+    if (!force && session.ready && lastSyncAt && (Date.now() - lastSyncAt) < SYNC_COOLDOWN_MS) {
+      return sessionReady || Promise.resolve(session);
+    }
+    if (syncInFlight) return syncInFlight;
+
+    syncInFlight = new Promise(function (resolve) {
+      ajaxPost('reloopin_launcher_session', null, function (data) {
+        lastSyncAt = Date.now();
+        applySession(data || { logged_in: false, user_id: 0 });
+        syncInFlight = null;
+        resolve(session);
+      }, function () {
+        if (!session.ready) {
+          applySession({
+            logged_in: hintLoggedIn,
+            nonce: reloopinLauncher.nonce,
+            user_id: hintLoggedIn ? Number(reloopinLauncher.user_id || 0) : 0,
+            name: reloopinLauncher.user_first_name || '',
+            initials: reloopinLauncher.user_initials || ''
+          });
+        }
+        syncInFlight = null;
+        resolve(session);
+      }, { skipSessionWait: true });
+    });
+    return syncInFlight;
+  }
+
+  function scheduleSyncSession() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      syncSession(false);
+    }, 300);
+  }
+
+  function requestToggle(kind) {
+    if (!session.ready) {
+      pendingToggle = kind;
+      return;
+    }
+    if (session.loggedIn) {
+      togglePanel();
+    } else {
+      toggleGuestPanel();
+    }
+  }
+
+  // First paint from hints only — session AJAX overwrites this.
+  if (hintLoggedIn) {
+    showLoggedIn();
+    maybeApplyPreloaded();
   } else {
-    elLoggedin.style.display = 'none';
-    elGuest.style.display = '';
+    showGuest();
   }
 
   // ── Panel toggle — logged in ───────────────────────────────────────────
@@ -147,22 +320,13 @@
       if (hint) hint.style.display = 'none';
       if (!dataLoaded) {
         fetchData();
-      } else {
-        // Data was preloaded — still need to lazy-load rules on first open
-        if (!rulesLoaded) fetchRules();
+      } else if (!rulesLoaded) {
+        fetchRules();
       }
     } else {
       panel.classList.remove('open');
     }
   }
-
-  if (launcher) launcher.addEventListener('click', togglePanel);
-
-  var closeBtn = document.getElementById('rl-close-btn');
-  if (closeBtn) closeBtn.addEventListener('click', function () {
-    panelOpen = true;
-    togglePanel();
-  });
 
   // ── Panel toggle — guest ───────────────────────────────────────────────
   function toggleGuestPanel() {
@@ -176,17 +340,37 @@
     }
   }
 
-  if (launcherGuest) launcherGuest.addEventListener('click', toggleGuestPanel);
-
-  var guestCloseBtn = panelGuest ? panelGuest.querySelector('.rl-guest-hero-close') : null;
-  if (guestCloseBtn) guestCloseBtn.addEventListener('click', function () {
-    guestOpen = true;
-    toggleGuestPanel();
+  root.addEventListener('click', function (e) {
+    if (e.target.closest('#rl-launcher')) {
+      e.stopPropagation();
+      requestToggle('loggedin');
+      return;
+    }
+    if (e.target.closest('#rl-launcher-guest')) {
+      e.stopPropagation();
+      requestToggle('guest');
+      return;
+    }
+    if (e.target.closest('#rl-close-btn')) {
+      e.stopPropagation();
+      if (panelOpen) {
+        panelOpen = true;
+        togglePanel();
+      }
+      return;
+    }
+    if (e.target.closest('#rl-guest-close-btn') || e.target.closest('.rl-guest-hero-close')) {
+      e.stopPropagation();
+      if (guestOpen) {
+        guestOpen = true;
+        toggleGuestPanel();
+      }
+    }
   });
 
   // ── Outside click & Escape ─────────────────────────────────────────────
   document.addEventListener('click', function (e) {
-    if (panelOpen && !panel.contains(e.target) && !launcher.contains(e.target)) {
+    if (panelOpen && panel && !panel.contains(e.target) && launcher && !launcher.contains(e.target)) {
       panelOpen = true;
       togglePanel();
     }
@@ -202,6 +386,30 @@
       if (guestOpen) { guestOpen = true; toggleGuestPanel(); }
       closeAllModals();
     }
+  });
+
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted || (performance.getEntriesByType && performance.getEntriesByType('navigation')[0] && performance.getEntriesByType('navigation')[0].type === 'back_forward')) {
+      syncSession(true);
+    }
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') scheduleSyncSession();
+  });
+
+  window.addEventListener('focus', function () {
+    scheduleSyncSession();
+  });
+
+  window.addEventListener('storage', function (e) {
+    if (e.key !== SESSION_TICK_KEY) return;
+    applyingFromStorage = true;
+    syncSession(true).then(function () {
+      applyingFromStorage = false;
+    }, function () {
+      applyingFromStorage = false;
+    });
   });
 
   // ── Tabs ───────────────────────────────────────────────────────────────
@@ -223,36 +431,74 @@
   });
 
   // ── AJAX helper ────────────────────────────────────────────────────────
-  function ajaxPost(action, extraData, onSuccess, onError) {
-    var data = new FormData();
-    data.append('action', action);
-    data.append('nonce', reloopinLauncher.nonce);
-    if (extraData) {
-      Object.keys(extraData).forEach(function (k) {
-        data.append(k, extraData[k]);
-      });
-    }
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', reloopinLauncher.ajax_url, true);
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          var resp = JSON.parse(xhr.responseText);
-          if (resp.success) {
-            onSuccess(resp.data);
-          } else {
-            if (onError) onError(resp.data);
-          }
-        } catch (e) {
-          if (onError) onError(null);
-        }
-      } else {
-        if (onError) onError(null);
-      }
-    };
-    xhr.onerror = function () { if (onError) onError(null); };
-    xhr.send(data);
+  function isNonceFailure(xhr, errData) {
+    if (xhr.status === 403 || xhr.status === 400) return true;
+    var text = (xhr.responseText || '').replace(/^\s+|\s+$/g, '');
+    if (text === '-1' || text === '0') return true;
+    if (errData && (errData === '-1' || errData.message === 'invalid_nonce')) return true;
+    return false;
   }
+
+  function ajaxPost(action, extraData, onSuccess, onError, options) {
+    var opts = options || {};
+
+    function send() {
+      var data = new FormData();
+      data.append('action', action);
+      data.append('nonce', session.nonce || reloopinLauncher.nonce);
+      if (extraData) {
+        Object.keys(extraData).forEach(function (k) {
+          data.append(k, extraData[k]);
+        });
+      }
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', reloopinLauncher.ajax_url, true);
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+      function retryOrFail(maybeNonce, errData) {
+        if (maybeNonce && !opts.retried && action !== 'reloopin_launcher_session') {
+          syncSession(true).then(function () {
+            ajaxPost(action, extraData, onSuccess, onError, { retried: true, skipSessionWait: true });
+          });
+          return;
+        }
+        if (onError) onError(errData);
+      }
+
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var resp = JSON.parse(xhr.responseText);
+            if (resp.success) {
+              if (resp.data && resp.data.nonce) {
+                session.nonce = resp.data.nonce;
+                reloopinLauncher.nonce = resp.data.nonce;
+              }
+              onSuccess(resp.data);
+            } else {
+              retryOrFail(isNonceFailure(xhr, resp.data), resp.data);
+            }
+          } catch (e) {
+            retryOrFail(isNonceFailure(xhr, null), null);
+          }
+        } else {
+          retryOrFail(isNonceFailure(xhr, null), null);
+        }
+      };
+      xhr.onerror = function () { if (onError) onError(null); };
+      xhr.send(data);
+    }
+
+    if (opts.skipSessionWait || action === 'reloopin_launcher_session') {
+      send();
+    } else if (sessionReady) {
+      sessionReady.then(send, send);
+    } else {
+      send();
+    }
+  }
+
+  sessionReady = syncSession(true);
 
   // ── Apply user/balance data to UI ───────────────────────────────────────
   function applyUserData(data) {
@@ -299,7 +545,11 @@
   function fetchData() {
     dataLoaded = true; // prevent double-fire on rapid clicks
     ajaxPost('reloopin_launcher_data', null, function (data) {
-      if (!data.logged_in) return;
+      if (!data || !data.logged_in) {
+        dataLoaded = false;
+        if (data) applySession(data);
+        return;
+      }
 
       applyUserData(data);
 
@@ -359,7 +609,7 @@
   };
 
   function fetchEarnStatus(onDone) {
-    if (!isLoggedIn) {
+    if (!session.loggedIn) {
       earnStatus = { completed: [], birthday_set: false };
       earnStatusLoaded = true;
       if (onDone) onDone();
@@ -613,7 +863,7 @@
   // ── Customer Coupons (Redeem tab) ───────────────────────────────────────
 
   function fetchCustomerCoupons() {
-    if (!isLoggedIn) return;
+    if (!session.loggedIn) return;
     couponsLoaded = true; // prevent double-fire
 
     ajaxPost('reloopin_launcher_coupons', null, function (data) {

@@ -3,7 +3,7 @@ Contributors: reloopin
 Tags: woocommerce, loyalty, rewards, points, referral
 Requires at least: 6.0
 Tested up to: 7.1
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -80,6 +80,9 @@ PHP 8.0 or later.
 
 == Changelog ==
 
+= 1.3.3 =
+* Launcher auth now follows the live WordPress session (uncached AJAX + nonce refresh), so login/logout stays in sync across cached pages, back-button, and other tabs.
+
 = 1.3.2 =
 * Restyled the Points Estimate badge as a rounded banner using the launcher primary color for text and border (no icon).
 
@@ -103,6 +106,9 @@ PHP 8.0 or later.
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.3.3 =
+Launcher login/logout now stays in sync with the live WordPress session on cached pages.
 
 = 1.3.2 =
 Restyled the Points Estimate badge. Includes WordPress.org compliance fixes (sanitization, changelog continuity).
